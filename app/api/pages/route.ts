@@ -1,13 +1,23 @@
 import { NextResponse } from 'next/server';
-import { readWorkspace, createPage } from '@/lib/store';
+import { canSeeProject, currentUser } from '@/lib/access';
+import { createPage, readWorkspace } from '@/lib/store';
 
 export async function GET() {
-  return NextResponse.json(await readWorkspace());
+  const me = await currentUser();
+  if (!me) return NextResponse.json({ error: 'nao autenticado' }, { status: 401 });
+  return NextResponse.json(await readWorkspace(me));
 }
 
 export async function POST(req: Request) {
+  const me = await currentUser();
+  if (!me) return NextResponse.json({ error: 'nao autenticado' }, { status: 401 });
+
   const body = await req.json();
-  const page = await createPage(body.projectId, body.title ?? 'Sem titulo', body.type ?? 'canvas');
+  if (!(await canSeeProject(me.id, body.projectId))) {
+    return NextResponse.json({ error: 'sem permissao' }, { status: 403 });
+  }
+
+  const page = await createPage(me.id, body.projectId, body.title ?? 'Sem titulo', body.type ?? 'canvas');
   if (!page) return NextResponse.json({ error: 'projeto inexistente' }, { status: 400 });
   return NextResponse.json(page, { status: 201 });
 }

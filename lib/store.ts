@@ -5,7 +5,9 @@ import {
   PROJECT_COLORS,
   type Assistant,
   type BoardElement,
+  type Me,
   type Page,
+  type PageRole,
   type Project,
   type Workspace,
 } from './types';
@@ -19,12 +21,14 @@ const PAGE_ICONS: Record<Page['type'], string> = {
 
 type Row = Record<string, unknown>;
 
-function toProject(r: Row): Project {
+function toProject(r: Row, userId: string): Project {
   return {
     id: r.id as string,
     name: r.name as string,
     icon: r.icon as string,
     color: r.color as string,
+    ownerId: (r.owner_id as string) ?? null,
+    mine: r.owner_id === userId,
     createdAt: new Date(r.created_at as string).toISOString(),
   };
 }
@@ -45,6 +49,8 @@ function toPage(r: Row): Page {
   return {
     id: r.id as string,
     projectId: r.project_id as string,
+    ownerId: (r.owner_id as string) ?? null,
+    role: (r.role as PageRole) ?? 'viewer',
     title: r.title as string,
     type: r.type as Page['type'],
     icon: r.icon as string,
@@ -55,44 +61,69 @@ function toPage(r: Row): Page {
   };
 }
 
-export async function readWorkspace(): Promise<Workspace> {
+/** Only what this user owns or has been given access to. */
+export async function readWorkspace(me: Me): Promise<Workspace> {
   await ensureSchema();
 
-  const [projects, assistants, pages] = await Promise.all([
-    sql`SELECT * FROM projects ORDER BY created_at`,
-    sql`SELECT * FROM assistants ORDER BY created_at`,
-    sql`SELECT * FROM pages ORDER BY created_at`,
-  ]);
+  const pages = await sql`
+    SELECT p.*,
+           CASE WHEN p.owner_id = ${me.id} THEN 'owner' ELSE s.role END AS role
+      FROM pages p
+      LEFT JOIN page_shares s ON s.page_id = p.id AND s.user_id = ${me.id}
+     WHERE p.owner_id = ${me.id} OR s.user_id IS NOT NULL
+     ORDER BY p.created_at`;
+
+  const projects = await sql`
+    SELECT * FROM projects p
+     WHERE p.owner_id = ${me.id}
+        OR EXISTS (
+             SELECT 1 FROM pages pg
+              WHERE pg.project_id = p.id
+                AND (pg.owner_id = ${me.id}
+                     OR EXISTS (SELECT 1 FROM page_shares s
+                                 WHERE s.page_id = pg.id AND s.user_id = ${me.id}))
+           )
+     ORDER BY p.created_at`;
+
+  const visibleProjectIds = projects.map((p) => p.id as string);
+  const assistants = visibleProjectIds.length
+    ? await sql`
+        SELECT * FROM assistants
+         WHERE project_id = ANY(${visibleProjectIds})
+         ORDER BY created_at`
+    : [];
 
   if (projects.length === 0) {
-    const project = await createProject('Meu primeiro projeto');
-    const page = await createPage(project.id, 'Quadro inicial', 'canvas');
-    return { projects: [project], assistants: [], pages: page ? [page] : [] };
+    const project = await createProject(me.id, 'Meu primeiro projeto');
+    const page = await createPage(me.id, project.id, 'Quadro inicial', 'canvas');
+    return { me, projects: [project], assistants: [], pages: page ? [page] : [] };
   }
 
   return {
-    projects: projects.map(toProject),
+    me,
+    projects: projects.map((p) => toProject(p, me.id)),
     assistants: assistants.map(toAssistant),
     pages: pages.map(toPage),
   };
 }
 
-export async function createProject(name: string): Promise<Project> {
+export async function createProject(ownerId: string, name: string): Promise<Project> {
   await ensureSchema();
   const [{ count }] = await sql`SELECT count(*)::int AS count FROM projects`;
   const color = PROJECT_COLORS[(count as number) % PROJECT_COLORS.length];
   const [row] = await sql`
-    INSERT INTO projects (id, name, icon, color)
-    VALUES (${randomUUID()}, ${name}, '📁', ${color})
+    INSERT INTO projects (id, name, icon, color, owner_id)
+    VALUES (${randomUUID()}, ${name}, '📁', ${color}, ${ownerId})
     RETURNING *`;
-  const project = toProject(row);
-  await createPage(project.id, 'Quadro inicial', 'canvas');
+  const project = toProject(row, ownerId);
+  await createPage(ownerId, project.id, 'Quadro inicial', 'canvas');
   return project;
 }
 
 export async function updateProject(
   id: string,
   patch: Partial<Project>,
+  userId: string,
 ): Promise<Project | null> {
   await ensureSchema();
   const [row] = await sql`
@@ -102,24 +133,26 @@ export async function updateProject(
            color = COALESCE(${patch.color ?? null}, color)
      WHERE id = ${id}
     RETURNING *`;
-  return row ? toProject(row) : null;
+  return row ? toProject(row, userId) : null;
 }
 
-export async function deleteProject(id: string): Promise<boolean> {
+export async function deleteProject(id: string, ownerId: string): Promise<boolean> {
   await ensureSchema();
   const removed = await sql`SELECT id FROM pages WHERE project_id = ${id}`;
-  // pages and assistants go with it via ON DELETE CASCADE
+  // pages, shares and assistants go with it via ON DELETE CASCADE
   const [gone] = await sql`DELETE FROM projects WHERE id = ${id} RETURNING id`;
   if (!gone) return false;
 
   await dropDanglingRefs(removed.map((r) => r.id as string));
 
-  const [{ count }] = await sql`SELECT count(*)::int AS count FROM projects`;
-  if ((count as number) === 0) await createProject('Meu primeiro projeto');
+  const [{ count }] = await sql`
+    SELECT count(*)::int AS count FROM projects WHERE owner_id = ${ownerId}`;
+  if ((count as number) === 0) await createProject(ownerId, 'Meu primeiro projeto');
   return true;
 }
 
 export async function createPage(
+  ownerId: string,
   projectId: string,
   title: string,
   type: Page['type'],
@@ -128,13 +161,17 @@ export async function createPage(
   const [project] = await sql`SELECT id FROM projects WHERE id = ${projectId}`;
   if (!project) return null;
   const [row] = await sql`
-    INSERT INTO pages (id, project_id, title, type, icon)
-    VALUES (${randomUUID()}, ${projectId}, ${title}, ${type}, ${PAGE_ICONS[type]})
+    INSERT INTO pages (id, project_id, title, type, icon, owner_id)
+    VALUES (${randomUUID()}, ${projectId}, ${title}, ${type}, ${PAGE_ICONS[type]}, ${ownerId})
     RETURNING *`;
-  return toPage(row);
+  return toPage({ ...row, role: 'owner' });
 }
 
-export async function updatePage(id: string, patch: Partial<Page>): Promise<Page | null> {
+export async function updatePage(
+  id: string,
+  patch: Partial<Page>,
+  role: PageRole,
+): Promise<Page | null> {
   await ensureSchema();
   const [row] = await sql`
     UPDATE pages
@@ -146,10 +183,10 @@ export async function updatePage(id: string, patch: Partial<Page>): Promise<Page
            updated_at = now()
      WHERE id = ${id}
     RETURNING *`;
-  return row ? toPage(row) : null;
+  return row ? toPage({ ...row, role }) : null;
 }
 
-export async function deletePage(id: string): Promise<boolean> {
+export async function deletePage(id: string, ownerId: string): Promise<boolean> {
   await ensureSchema();
   const [page] = await sql`SELECT project_id FROM pages WHERE id = ${id}`;
   if (!page) return false;
@@ -160,7 +197,7 @@ export async function deletePage(id: string): Promise<boolean> {
   const [{ count }] = await sql`
     SELECT count(*)::int AS count FROM pages WHERE project_id = ${page.project_id}`;
   if ((count as number) === 0) {
-    await createPage(page.project_id as string, 'Quadro inicial', 'canvas');
+    await createPage(ownerId, page.project_id as string, 'Quadro inicial', 'canvas');
   }
   return true;
 }
@@ -215,10 +252,16 @@ export async function deleteAssistant(id: string): Promise<boolean> {
   return true;
 }
 
-export async function getAssistant(id: string): Promise<Assistant | null> {
+export async function getAssistantProject(id: string): Promise<string | null> {
   await ensureSchema();
-  const [row] = await sql`SELECT * FROM assistants WHERE id = ${id}`;
-  return row ? toAssistant(row) : null;
+  const [row] = await sql`SELECT project_id FROM assistants WHERE id = ${id}`;
+  return row ? (row.project_id as string) : null;
+}
+
+export async function getPageProject(id: string): Promise<string | null> {
+  await ensureSchema();
+  const [row] = await sql`SELECT project_id FROM pages WHERE id = ${id}`;
+  return row ? (row.project_id as string) : null;
 }
 
 /** Link blocks pointing at pages that no longer exist would render as broken cards. */

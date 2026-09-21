@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { currentUser } from '@/lib/access';
 import { put } from '@vercel/blob';
 import { randomUUID } from 'crypto';
 
@@ -11,6 +12,10 @@ const ALLOWED: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
+  if (!(await currentUser())) {
+    return NextResponse.json({ error: 'nao autenticado' }, { status: 401 });
+  }
+
   const form = await req.formData();
   const file = form.get('file');
   if (!(file instanceof File)) {

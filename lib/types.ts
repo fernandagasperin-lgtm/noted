@@ -52,12 +52,24 @@ export interface BoardElement {
 
 export type PageType = 'canvas' | 'text' | 'table' | 'assistants';
 
+export type PageRole = 'owner' | 'editor' | 'viewer';
+
 export interface Project {
   id: string;
   name: string;
   icon: string;
   color: string;
+  ownerId: string | null;
+  /** true when the signed-in user owns it */
+  mine: boolean;
   createdAt: string;
+}
+
+export interface Me {
+  id: string;
+  name: string;
+  email: string;
+  isAdmin: boolean;
 }
 
 export interface Assistant {
@@ -75,6 +87,9 @@ export interface Assistant {
 export interface Page {
   id: string;
   projectId: string;
+  ownerId: string | null;
+  /** what the signed-in user may do with this page */
+  role: PageRole;
   title: string;
   type: PageType;
   icon: string;
@@ -87,6 +102,7 @@ export interface Page {
 }
 
 export interface Workspace {
+  me: Me;
   projects: Project[];
   assistants: Assistant[];
   pages: Page[];

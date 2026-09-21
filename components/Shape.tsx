@@ -206,7 +206,7 @@ export default function Shape({
           )}
           <Text text={target?.icon ?? '🔗'} x={16} y={15} fontSize={20} />
           <Text
-            text={target?.title ?? 'Pagina removida'}
+            text={target?.title ?? 'Pagina indisponivel'}
             x={46}
             y={16}
             width={el.width - 62}

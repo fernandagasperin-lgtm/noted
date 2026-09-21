@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import type { Page, PageType, Project } from '@/lib/types';
+import type { Me, Page, PageType, Project } from '@/lib/types';
 
 interface Props {
+  me: Me | null;
   projects: Project[];
   pages: Page[];
   activeId: string;
@@ -14,9 +15,11 @@ interface Props {
   onCreateProject: () => void;
   onRenameProject: (id: string, name: string) => void;
   onDeleteProject: (id: string) => void;
+  onOpenMembers: () => void;
 }
 
 export default function Sidebar({
+  me,
   projects,
   pages,
   activeId,
@@ -27,6 +30,7 @@ export default function Sidebar({
   onCreateProject,
   onRenameProject,
   onDeleteProject,
+  onOpenMembers,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renaming, setRenaming] = useState<{ kind: 'page' | 'project'; id: string } | null>(null);
@@ -114,6 +118,8 @@ export default function Sidebar({
 
                 <div className="relative shrink-0">
                   <button
+                    disabled={!project.mine}
+                    title={project.mine ? undefined : 'Projeto de outra pessoa'}
                     onClick={(e) => {
                       e.stopPropagation();
                       setMenuFor(menuFor === project.id ? null : project.id);
@@ -182,7 +188,9 @@ export default function Sidebar({
                     <div
                       key={page.id}
                       onClick={() => onSelect(page.id)}
-                      onDoubleClick={() => startRename('page', page.id, page.title)}
+                      onDoubleClick={() =>
+                        page.role === 'owner' && startRename('page', page.id, page.title)
+                      }
                       className={
                         'group flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] transition ' +
                         (page.id === activeId
@@ -198,25 +206,40 @@ export default function Sidebar({
                         <span className="min-w-0 flex-1 truncate">{page.title}</span>
                       )}
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm('Excluir "' + page.title + '"?')) onDeletePage(page.id);
-                        }}
-                        title="Excluir pagina"
-                        className="shrink-0 rounded px-1 text-slate-400 opacity-0 transition hover:bg-slate-300/50 hover:text-rose-600 group-hover:opacity-100"
-                      >
-                        ×
-                      </button>
+                      {page.role === 'owner' ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Excluir "' + page.title + '"?')) onDeletePage(page.id);
+                          }}
+                          title="Excluir pagina"
+                          className="shrink-0 rounded px-1 text-slate-400 opacity-0 transition hover:bg-slate-300/50 hover:text-rose-600 group-hover:opacity-100"
+                        >
+                          ×
+                        </button>
+                      ) : (
+                        <span
+                          title={
+                            page.role === 'editor'
+                              ? 'Compartilhada com voce · pode editar'
+                              : 'Compartilhada com voce · somente leitura'
+                          }
+                          className="shrink-0 text-[11px] text-slate-400"
+                        >
+                          {page.role === 'editor' ? '✎' : '👁'}
+                        </span>
+                      )}
                     </div>
                   ))}
 
-                  <button
-                    onClick={() => onCreatePage(project.id, 'canvas')}
-                    className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-200/40 hover:text-slate-600"
-                  >
-                    + Nova pagina
-                  </button>
+                  {project.mine && (
+                    <button
+                      onClick={() => onCreatePage(project.id, 'canvas')}
+                      className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-slate-400 transition hover:bg-slate-200/40 hover:text-slate-600"
+                    >
+                      + Nova pagina
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -224,13 +247,39 @@ export default function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-slate-200/70 p-2">
+      <div className="space-y-0.5 border-t border-slate-200/70 p-2">
         <button
           onClick={onCreateProject}
           className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-slate-500 transition hover:bg-slate-200/50 hover:text-slate-800"
         >
           + Novo projeto
         </button>
+
+        {me?.isAdmin && (
+          <button
+            onClick={onOpenMembers}
+            className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] text-slate-500 transition hover:bg-slate-200/50 hover:text-slate-800"
+          >
+            Pessoas
+          </button>
+        )}
+
+        {me && (
+          <div className="flex items-center gap-2 px-2 pt-1.5">
+            <span className="min-w-0 flex-1 truncate text-[12px] text-slate-400" title={me.email}>
+              {me.name}
+            </span>
+            <button
+              onClick={async () => {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.href = '/login';
+              }}
+              className="shrink-0 rounded px-1.5 py-0.5 text-[12px] text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-700"
+            >
+              Sair
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

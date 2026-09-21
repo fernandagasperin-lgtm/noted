@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { currentUser } from '@/lib/access';
 import Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-opus-5';
@@ -8,6 +9,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (!(await currentUser())) {
+    return NextResponse.json({ error: 'nao autenticado' }, { status: 401 });
+  }
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
       { error: 'Sem ANTHROPIC_API_KEY. Copie o prompt e gere onde preferir.' },

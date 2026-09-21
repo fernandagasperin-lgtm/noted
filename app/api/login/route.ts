@@ -1,24 +1,21 @@
 import { NextResponse } from 'next/server';
-import {
-  SESSION_COOKIE,
-  SESSION_MAX_AGE,
-  authConfigured,
-  createSessionToken,
-  passwordMatches,
-} from '@/lib/auth';
+import { SESSION_COOKIE, SESSION_MAX_AGE, createSessionToken } from '@/lib/session';
+import { authenticate } from '@/lib/users';
 
 export async function POST(req: Request) {
-  if (!authConfigured()) {
-    return NextResponse.json({ error: 'login nao configurado' }, { status: 503 });
+  const { email, password } = await req.json();
+  if (typeof email !== 'string' || typeof password !== 'string') {
+    return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 });
   }
 
-  const { password } = await req.json();
-  if (typeof password !== 'string' || !passwordMatches(password)) {
-    return NextResponse.json({ error: 'Senha incorreta.' }, { status: 401 });
+  const user = await authenticate(email, password);
+  if (!user) {
+    // Same message either way, so it does not reveal which e-mails exist.
+    return NextResponse.json({ error: 'E-mail ou senha incorretos.' }, { status: 401 });
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(SESSION_COOKIE, await createSessionToken(), {
+  res.cookies.set(SESSION_COOKIE, await createSessionToken(user.id), {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

@@ -8,11 +8,14 @@ import PropertiesPanel from './PropertiesPanel';
 import AssistantsPage from './AssistantsPage';
 import TablePage from './TablePage';
 import RunAssistantDialog, { type RunResult } from './RunAssistantDialog';
+import ShareDialog from './ShareDialog';
+import MembersDialog from './MembersDialog';
 import {
   DEFAULT_STYLE,
   type Assistant,
   type BoardElement,
   type ElementType,
+  type Me,
   type Page,
   type PageType,
   type Project,
@@ -54,6 +57,7 @@ const STROKE_BY_TYPE: Partial<Record<ElementType, string>> = {
 };
 
 export default function Workspace() {
+  const [me, setMe] = useState<Me | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [assistants, setAssistants] = useState<Assistant[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
@@ -67,6 +71,9 @@ export default function Workspace() {
     assistant: Assistant;
     parent?: BoardElement;
   } | null>(null);
+  const [showShare, setShowShare] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const [others, setOthers] = useState<string[]>([]);
 
   const pagesRef = useRef<Page[]>([]);
   const pendingSelect = useRef<string[] | null>(null);
@@ -91,6 +98,7 @@ export default function Workspace() {
 
   const loadWorkspace = useCallback(async (selectPageId?: string) => {
     const ws = await fetch('/api/pages').then((r) => r.json());
+    setMe(ws.me);
     setProjects(ws.projects);
     setAssistants(ws.assistants ?? []);
     setPages(ws.pages);
@@ -157,7 +165,7 @@ export default function Workspace() {
   const setElements = useCallback(
     (updater: (prev: BoardElement[]) => BoardElement[], recordHistory = true) => {
       const current = pagesRef.current.find((p) => p.id === activeId);
-      if (!current) return;
+      if (!current || current.role === 'viewer') return;
       const next = updater(current.elements);
 
       if (recordHistory) {
@@ -461,6 +469,30 @@ export default function Workspace() {
   };
 
   useEffect(() => {
+    if (!activePage) return;
+    let alive = true;
+    const beat = async () => {
+      try {
+        const res = await fetch('/api/presence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: activePage.id }),
+        });
+        const data = await res.json();
+        if (alive) setOthers(data.others ?? []);
+      } catch {
+        // a missed heartbeat just means a stale list; the next one corrects it
+      }
+    };
+    beat();
+    const timer = setInterval(beat, 20000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [activePage?.id]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (
@@ -522,10 +554,13 @@ export default function Workspace() {
   }
 
   const selectedElements = activePage.elements.filter((el) => selectedIds.includes(el.id));
+  const isOwner = activePage.role === 'owner';
+  const canEdit = isOwner || activePage.role === 'editor';
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-800">
       <Sidebar
+        me={me}
         projects={projects}
         pages={pages}
         activeId={activeId}
@@ -536,6 +571,7 @@ export default function Workspace() {
         onCreateProject={createProject}
         onRenameProject={renameProject}
         onDeleteProject={deleteProject}
+        onOpenMembers={() => setShowMembers(true)}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -549,7 +585,8 @@ export default function Workspace() {
               <select
                 value={activeProject.id}
                 onChange={(e) => movePage(activePage.id, e.target.value)}
-                title="Mover para outro projeto"
+                disabled={!isOwner}
+                title={isOwner ? 'Mover para outro projeto' : 'Só o dono pode mover a página'}
                 className="cursor-pointer appearance-none rounded-md bg-transparent py-0.5 text-[13px] font-medium text-slate-500 outline-none transition hover:text-slate-800"
               >
                 {projects.map((p) => (
@@ -565,9 +602,37 @@ export default function Workspace() {
           <span className="shrink-0 text-base">{activePage.icon}</span>
           <input
             value={activePage.title}
+            readOnly={!isOwner}
             onChange={(e) => renamePage(activePage.id, e.target.value)}
-            className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-[17px] font-semibold tracking-tight text-slate-900 outline-none transition focus:bg-slate-50"
+            className={
+              'min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-[17px] font-semibold tracking-tight text-slate-900 outline-none transition ' +
+              (isOwner ? 'focus:bg-slate-50' : 'cursor-default')
+            }
           />
+
+          {!canEdit && (
+            <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[11.5px] font-medium text-slate-500">
+              Somente leitura
+            </span>
+          )}
+
+          {others.length > 0 && (
+            <span
+              title={others.join(', ') + ' com esta pagina aberta'}
+              className="shrink-0 rounded-md bg-amber-50 px-2 py-1 text-[11.5px] font-medium text-amber-700"
+            >
+              {others.length === 1 ? `${others[0]} está aqui` : `${others.length} pessoas aqui`}
+            </span>
+          )}
+
+          {isOwner && (
+            <button
+              onClick={() => setShowShare(true)}
+              className="shrink-0 rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            >
+              Compartilhar
+            </button>
+          )}
 
           <span className="shrink-0 text-xs text-slate-400">
             {saving ? 'Salvando...' : 'Salvo'}
@@ -596,8 +661,11 @@ export default function Workspace() {
                 canUndo={histIndex.current > 0}
                 canRedo={histIndex.current < history.current.length - 1}
               />
-              <Toolbar tool={tool} setTool={setTool} onUploadImage={uploadImage} />
+              {canEdit && (
+                <Toolbar tool={tool} setTool={setTool} onUploadImage={uploadImage} />
+              )}
             </div>
+            {canEdit && (
             <PropertiesPanel
               elements={selectedElements}
               pages={pages}
@@ -610,6 +678,7 @@ export default function Workspace() {
               onBringToFront={() => reorder(true)}
               onSendToBack={() => reorder(false)}
             />
+            )}
           </div>
         )}
 
@@ -622,7 +691,8 @@ export default function Workspace() {
                   prev.map((p) => (p.id === activeId ? { ...p, body: e.target.value } : p)),
                 )
               }
-              placeholder="Escreva aqui..."
+              readOnly={!canEdit}
+              placeholder={canEdit ? 'Escreva aqui...' : ''}
               className="mx-auto block h-full w-full max-w-3xl resize-none px-8 py-10 text-[15px] leading-7 text-slate-700 outline-none placeholder:text-slate-300"
             />
           </div>
@@ -647,6 +717,14 @@ export default function Workspace() {
           />
         )}
       </main>
+
+      {showShare && me && (
+        <ShareDialog page={activePage} meId={me.id} onClose={() => setShowShare(false)} />
+      )}
+
+      {showMembers && me && (
+        <MembersDialog meId={me.id} onClose={() => setShowMembers(false)} />
+      )}
 
       {runTarget && (
         <RunAssistantDialog

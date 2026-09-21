@@ -14,8 +14,57 @@ npm run dev
 Abra http://localhost:3000
 
 Os dados vivem num banco Postgres na nuvem, então mesmo local você precisa de
-`DATABASE_URL` no `.env.local` (copie a connection string do painel do Neon).
-Sem `APP_PASSWORD` preenchido, o local abre direto, sem pedir senha.
+`DATABASE_URL` e `APP_SECRET` no `.env.local` (a connection string sai do painel do
+Neon). O login vale igual no local — use a mesma conta.
+
+## Contas, convites e permissões
+
+A primeira pessoa a abrir o app cria a conta de administrador — e essa conta adota
+tudo que já existia no workspace, para nada ficar sem dono.
+
+**Convidar.** No rodapé da barra lateral, `Pessoas` (só admin). Você digita o e-mail e
+o app gera um **link que vai para a área de transferência**; mande por onde quiser. O app
+não envia e-mail de propósito: seria um serviço a mais para contratar e manter. Quem
+recebe abre o link, escolhe o nome e a senha, e já entra. O link vale 14 dias e só
+funciona uma vez.
+
+**Senha esquecida.** Em `Pessoas`, `nova senha` gera um link de redefinição do mesmo jeito.
+
+**Permissão é por página.** Quem cria é o dono. O dono abre `Compartilhar` no topo da
+página e escolhe quem mais entra:
+
+| Papel | Pode |
+| --- | --- |
+| Dono | tudo, mais renomear, mover, excluir e compartilhar |
+| Editor | mexer no conteúdo da página |
+| Leitor | abrir e acompanhar, sem alterar nada |
+
+Uma pessoa só enxerga na barra lateral o que é dela ou foi compartilhado com ela. Um
+projeto aparece quando ela tem acesso a pelo menos uma página dentro dele, e a tabela de
+derivações soma apenas os quadros permitidos. Um bloco de link que aponta para uma página
+sem acesso mostra "Página indisponível", sem revelar o título.
+
+Só o dono do projeto cria páginas e assistentes nele.
+
+### O limite que continua de pé
+
+**Dois editores na mesma página se sobrescrevem.** Quem salvar por último apaga o que o
+outro fez, sem aviso. O app mostra "fulano está aqui" no topo quando outra pessoa tem a
+página aberta, o que ajuda a evitar o esbarrão — mas é um aviso, não sincronização.
+Edição simultânea de verdade, estilo Miro, é um projeto à parte.
+
+Por isso o padrão ao compartilhar é **Leitor**. Dê Editor só a quem precisa.
+
+### Conferir que a permissão está funcionando
+
+Com o servidor rodando e apontando para um banco **de teste** (vazio):
+
+```bash
+node scripts/smoke-test.mjs
+```
+
+Ele cria duas contas e verifica o modelo inteiro: isolamento, convite de uso único,
+leitor que não escreve, editor que não renomeia nem exclui, e revogação de acesso.
 
 ## Hospedagem
 
@@ -28,14 +77,24 @@ Passo a passo, a partir de uma conta na Vercel:
 2. No painel do projeto, aba **Storage**, crie um banco **Neon Postgres** e um
    **Blob store**. Isso preenche `DATABASE_URL` e `BLOB_READ_WRITE_TOKEN` sozinho.
 3. Em **Settings → Environment Variables**, adicione:
-   - `APP_PASSWORD` — a senha para entrar no app
-   - `APP_SECRET` — string aleatória longa; gere com
+   - `APP_SECRET` — string aleatória longa, assina o cookie de sessão; gere com
      `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
    - `ANTHROPIC_API_KEY` — opcional, liga o botão "Gerar com Claude"
-4. Faça o deploy. As tabelas são criadas sozinhas no primeiro acesso.
+4. Faça o deploy. As tabelas são criadas sozinhas no primeiro acesso, e a primeira
+   pessoa a abrir o app cria a conta de administrador.
 
-Se o app subir sem `APP_PASSWORD` e `APP_SECRET`, ele recusa todo acesso com uma
-mensagem em vez de ficar aberto na internet.
+Se o app subir sem `APP_SECRET`, ele recusa todo acesso com uma mensagem em vez de
+ficar aberto na internet.
+
+### Domínio próprio
+
+Um subdomínio é roteado independente do domínio raiz, então seu site atual fica onde está:
+
+1. Na Vercel, **Settings → Domains**, adicione `ideias.seudominio.com.br`
+2. No DNS do seu registrador, crie um **CNAME** com nome `ideias` apontando para
+   `cname.vercel-dns.com`
+
+O certificado SSL a Vercel emite sozinha.
 
 ### Levar os dados locais para a nuvem
 
@@ -162,10 +221,14 @@ lib/
   types.ts              tipos, template de prompt e padrão de título
   db.ts                 conexão e criação das tabelas
   store.ts              leitura e escrita no Postgres
-  auth.ts               senha e cookie de sessão
-middleware.ts           exige login em tudo, menos /login
+  session.ts            cookie de sessão (roda no Edge, junto do middleware)
+  password.ts           hash scrypt, sem dependência nativa
+  users.ts              contas e convites
+  access.ts             quem pode ver e editar cada página
+middleware.ts           exige sessão em tudo, menos login e convite
 scripts/
   migrate-to-cloud.mjs  leva data/workspace.json para o banco
+  smoke-test.mjs        verifica o modelo de permissão de ponta a ponta
 ```
 
 ## No celular
