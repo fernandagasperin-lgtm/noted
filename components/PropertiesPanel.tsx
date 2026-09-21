@@ -33,6 +33,7 @@ interface Props {
   onDuplicate: () => void;
   onBringToFront: () => void;
   onSendToBack: () => void;
+  onDeselect: () => void;
 }
 
 export default function PropertiesPanel({
@@ -46,10 +47,11 @@ export default function PropertiesPanel({
   onDuplicate,
   onBringToFront,
   onSendToBack,
+  onDeselect,
 }: Props) {
   if (elements.length === 0) {
     return (
-      <aside className="w-64 shrink-0 border-l border-slate-200/70 bg-white p-5">
+      <aside className="w-64 shrink-0 border-l border-slate-200/70 bg-white p-5 max-md:hidden">
         <p className="text-[13px] leading-relaxed text-slate-400">
           Selecione um elemento para editar cor, tamanho e posicao.
         </p>
@@ -83,11 +85,28 @@ export default function PropertiesPanel({
     'w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] text-slate-600 transition hover:bg-slate-100 hover:text-slate-900';
 
   return (
-    <aside className="w-64 shrink-0 space-y-5 overflow-y-auto border-l border-slate-200/70 bg-white p-5">
-      <div className="text-[13px] font-semibold text-slate-800">
-        {elements.length > 1
-          ? elements.length + ' elementos'
-          : TYPE_LABELS[first.type] ?? first.type}
+    <aside
+      className={
+        'space-y-5 overflow-y-auto bg-white ' +
+        // celular: folha que sobe pelo rodape. desktop: coluna a direita
+        'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-20 max-md:max-h-[50vh] ' +
+        'max-md:rounded-t-2xl max-md:border-t max-md:border-slate-200 max-md:p-4 max-md:shadow-2xl ' +
+        'md:w-64 md:shrink-0 md:border-l md:border-slate-200/70 md:p-5'
+      }
+    >
+      <div className="flex items-center gap-2">
+        <div className="flex-1 text-[13px] font-semibold text-slate-800">
+          {elements.length > 1
+            ? elements.length + ' elementos'
+            : TYPE_LABELS[first.type] ?? first.type}
+        </div>
+        <button
+          onClick={onDeselect}
+          title="Fechar"
+          className="rounded-lg px-2 py-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 md:hidden"
+        >
+          ×
+        </button>
       </div>
 
       {first.type === 'assistant' && (

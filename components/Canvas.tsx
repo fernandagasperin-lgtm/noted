@@ -116,6 +116,42 @@ export default function Canvas({
     syncView(stage);
   };
 
+  const pinch = useRef<{ dist: number; center: { x: number; y: number } } | null>(null);
+
+  const handleTouchMove = (e: Konva.KonvaEventObject<TouchEvent>) => {
+    const touches = e.evt.touches;
+    const stage = stageRef.current;
+    if (!stage || touches.length !== 2) return;
+
+    e.evt.preventDefault();
+    stage.stopDrag();
+
+    const box = stage.container().getBoundingClientRect();
+    const a = { x: touches[0].clientX - box.left, y: touches[0].clientY - box.top };
+    const b = { x: touches[1].clientX - box.left, y: touches[1].clientY - box.top };
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+
+    if (!pinch.current) {
+      pinch.current = { dist, center };
+      return;
+    }
+
+    const oldScale = stage.scaleX();
+    const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldScale * (dist / pinch.current.dist)));
+    // Ancorar no ponto entre os dedos faz o quadro seguir a mao: o zoom e o
+    // arrasto saem do mesmo gesto.
+    const pointTo = {
+      x: (pinch.current.center.x - stage.x()) / oldScale,
+      y: (pinch.current.center.y - stage.y()) / oldScale,
+    };
+    stage.scale({ x: next, y: next });
+    stage.position({ x: center.x - pointTo.x * next, y: center.y - pointTo.y * next });
+
+    pinch.current = { dist, center };
+    syncView(stage);
+  };
+
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -187,6 +223,9 @@ export default function Canvas({
   };
 
   const selectElement = (el: BoardElement) => (e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Com uma ferramenta ativa o toque cria um elemento novo, mesmo em cima de
+    // outro: deixar o clique subir ate o stage e o que permite isso.
+    if (tool !== 'select') return;
     e.cancelBubble = true;
     const additive = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
     if (additive) {
@@ -237,6 +276,7 @@ export default function Canvas({
         backgroundImage: 'radial-gradient(circle, #D8DDE6 1.1px, transparent 1.1px)',
         backgroundSize: `${GRID * view.zoom}px ${GRID * view.zoom}px`,
         backgroundPosition: `${view.x}px ${view.y}px`,
+        touchAction: 'none',
       }}
     >
       <Stage
@@ -248,6 +288,8 @@ export default function Canvas({
         onMouseDown={handleStageMouseDown}
         onDragMove={(e) => e.target === stageRef.current && syncView(e.target as Konva.Stage)}
         onDragEnd={(e) => e.target === stageRef.current && syncView(e.target as Konva.Stage)}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={() => (pinch.current = null)}
         style={{ cursor: tool === 'select' ? 'default' : 'crosshair' }}
       >
         <Layer>
@@ -308,7 +350,7 @@ export default function Canvas({
         />
       )}
 
-      <div className="absolute bottom-4 left-4 z-10 flex items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg shadow-slate-900/[0.06] backdrop-blur">
+      <div className="absolute left-3 z-10 flex items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg shadow-slate-900/[0.06] backdrop-blur max-md:bottom-[4.75rem] md:bottom-4 md:left-4">
         <button onClick={onUndo} disabled={!canUndo} title="Desfazer (Ctrl+Z)" className={pillButton}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 8h11a5 5 0 010 10h-7M3 8l4-4M3 8l4 4" />
@@ -321,7 +363,7 @@ export default function Canvas({
         </button>
       </div>
 
-      <div className="absolute bottom-4 right-4 z-10 flex items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg shadow-slate-900/[0.06] backdrop-blur">
+      <div className="absolute right-3 z-10 flex items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg shadow-slate-900/[0.06] backdrop-blur max-md:top-3 md:bottom-4 md:right-4">
         <button onClick={() => applyZoom(view.zoom / 1.2)} title="Diminuir zoom" className={pillButton}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M5 12h14" />

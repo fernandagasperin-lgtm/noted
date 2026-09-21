@@ -48,21 +48,28 @@ export default function AssistantsPage({
     : [];
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className="w-64 shrink-0 overflow-y-auto border-r border-slate-200/70 bg-[#FBFBFA] p-2">
+    <div className="flex min-h-0 flex-1 max-md:flex-col">
+      <div
+        className={
+          'shrink-0 bg-[#FBFBFA] p-2 ' +
+          // celular: a lista vira uma tira horizontal, para o editor ficar inteiro
+          'max-md:flex max-md:gap-1.5 max-md:overflow-x-auto max-md:border-b max-md:border-slate-200/70 ' +
+          'md:w-64 md:overflow-y-auto md:border-r md:border-slate-200/70'
+        }
+      >
         {mine.map((a) => (
           <div
             key={a.id}
             onClick={() => setActiveId(a.id)}
             className={
-              'group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition ' +
+              'group flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] transition max-md:shrink-0 ' +
               (a.id === activeId
                 ? 'bg-indigo-50 font-medium text-indigo-900'
                 : 'text-slate-600 hover:bg-slate-200/50')
             }
           >
             <span className="shrink-0 text-indigo-500">✦</span>
-            <span className="min-w-0 flex-1 truncate">{a.name}</span>
+            <span className="min-w-0 flex-1 truncate max-md:max-w-[9rem]">{a.name}</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -77,7 +84,7 @@ export default function AssistantsPage({
 
         <button
           onClick={onCreate}
-          className="mt-1 w-full rounded-lg px-2.5 py-2 text-left text-[13px] text-slate-500 transition hover:bg-slate-200/50 hover:text-slate-800"
+          className="rounded-lg px-2.5 py-2 text-left text-[13px] text-slate-500 transition hover:bg-slate-200/50 hover:text-slate-800 max-md:shrink-0 max-md:whitespace-nowrap md:mt-1 md:w-full"
         >
           + Novo assistente
         </button>
@@ -99,7 +106,7 @@ export default function AssistantsPage({
             </button>
           </div>
         ) : (
-          <div className="mx-auto max-w-2xl space-y-5 p-8">
+          <div className="mx-auto max-w-2xl space-y-5 p-4 md:p-8">
             <div>
               {label('Nome')}
               <input

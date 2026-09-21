@@ -16,6 +16,9 @@ interface Props {
   onRenameProject: (id: string, name: string) => void;
   onDeleteProject: (id: string) => void;
   onOpenMembers: () => void;
+  /** no celular a barra vira gaveta sobre o conteudo */
+  open: boolean;
+  onClose: () => void;
 }
 
 export default function Sidebar({
@@ -31,6 +34,8 @@ export default function Sidebar({
   onRenameProject,
   onDeleteProject,
   onOpenMembers,
+  open,
+  onClose,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [renaming, setRenaming] = useState<{ kind: 'page' | 'project'; id: string } | null>(null);
@@ -68,7 +73,21 @@ export default function Sidebar({
   );
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-200/70 bg-[#FBFBFA]">
+    <>
+      {open && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 z-30 bg-slate-900/25 backdrop-blur-sm md:hidden"
+        />
+      )}
+
+    <aside
+      className={
+        'z-40 flex h-full w-64 shrink-0 flex-col border-r border-slate-200/70 bg-[#FBFBFA] ' +
+        'max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:shadow-2xl max-md:transition-transform ' +
+        (open ? 'max-md:translate-x-0' : 'max-md:-translate-x-full')
+      }
+    >
       <div className="flex items-center justify-between px-4 py-3.5">
         <span className="text-[13px] font-semibold tracking-tight text-slate-800">
           Meu workspace
@@ -187,7 +206,10 @@ export default function Sidebar({
                   {projectPages.map((page) => (
                     <div
                       key={page.id}
-                      onClick={() => onSelect(page.id)}
+                      onClick={() => {
+                        onSelect(page.id);
+                        onClose();
+                      }}
                       onDoubleClick={() =>
                         page.role === 'owner' && startRename('page', page.id, page.title)
                       }
@@ -282,5 +304,6 @@ export default function Sidebar({
         )}
       </div>
     </aside>
+    </>
   );
 }

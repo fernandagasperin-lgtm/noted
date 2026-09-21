@@ -120,7 +120,7 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-200/70 px-5 py-2.5">
+      <div className="flex items-center gap-2 border-b border-slate-200/70 px-3 py-2.5 max-md:flex-wrap md:px-5">
         <button onClick={() => setTab('derivations')} className={tabClass(tab === 'derivations')}>
           Derivacoes
           <span className="ml-1.5 text-slate-400">{derivations.length}</span>
@@ -130,23 +130,24 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
           <span className="ml-1.5 text-slate-400">{inventory.length}</span>
         </button>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:w-full md:ml-auto">
           {tab === 'derivations' && (
-            <label className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-slate-500">
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12.5px] text-slate-500">
               <input
                 type="checkbox"
                 checked={grouped}
                 onChange={(e) => setGrouped(e.target.checked)}
                 className="accent-blue-600"
               />
-              Agrupar por assistente
+              Agrupar
+              <span className="max-md:hidden">por assistente</span>
             </label>
           )}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar..."
-            className="w-44 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[13px] outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[13px] outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 max-md:flex-1 md:w-44"
           />
         </div>
       </div>
@@ -159,9 +160,9 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
               use — cada uso vira uma linha aqui.
             </p>
           ) : grouped && groups ? (
-            <div className="p-5">
+            <div className="p-3 md:p-5">
               {groups.map(([assistantId, rows]) => (
-                <div key={assistantId} className="mb-6">
+                <div key={assistantId} className="mb-6 max-md:overflow-x-auto">
                   <div className="mb-1.5 flex items-center gap-2">
                     <span className="text-indigo-500">✦</span>
                     <h3 className="text-[13px] font-semibold text-slate-800">
@@ -171,7 +172,7 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
                       {rows.length} {rows.length === 1 ? 'variacao' : 'variacoes'}
                     </span>
                   </div>
-                  <table className="w-full border-collapse">
+                  <table className="w-full border-collapse max-md:min-w-[36rem]">
                     <thead>{derivationHeader}</thead>
                     <tbody>{rows.map(derivationRow)}</tbody>
                   </table>
@@ -179,17 +180,20 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
               ))}
             </div>
           ) : (
-            <table className="w-full border-collapse p-5">
-              <thead>{derivationHeader}</thead>
-              <tbody>{derivations.map(derivationRow)}</tbody>
-            </table>
+            <div className="overflow-x-auto p-3 md:p-5">
+              <table className="w-full border-collapse max-md:min-w-[36rem]">
+                <thead>{derivationHeader}</thead>
+                <tbody>{derivations.map(derivationRow)}</tbody>
+              </table>
+            </div>
           )
         ) : inventory.length === 0 ? (
           <p className="p-8 text-[13px] text-slate-400">
             Os quadros deste projeto ainda estao vazios.
           </p>
         ) : (
-          <table className="w-full border-collapse">
+          <div className="overflow-x-auto">
+          <table className="w-full border-collapse max-md:min-w-[32rem]">
             <thead>
               <tr className="border-b border-slate-200">
                 <th className={th}>Tipo</th>
@@ -224,6 +228,7 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

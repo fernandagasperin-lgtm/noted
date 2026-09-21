@@ -74,6 +74,7 @@ export default function Workspace() {
   const [showShare, setShowShare] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [others, setOthers] = useState<string[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const pagesRef = useRef<Page[]>([]);
   const pendingSelect = useRef<string[] | null>(null);
@@ -567,6 +568,8 @@ export default function Workspace() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-800">
       <Sidebar
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         me={me}
         projects={projects}
         pages={pages}
@@ -582,11 +585,21 @@ export default function Workspace() {
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2.5 border-b border-slate-200/70 px-5 py-3">
+        <header className="flex items-center gap-2.5 border-b border-slate-200/70 px-3 py-3 md:px-5">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            title="Abrir menu"
+            className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 md:hidden"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+
           {activeProject && (
             <>
               <span
-                className="h-2 w-2 shrink-0 rounded-full"
+                className="h-2 w-2 shrink-0 rounded-full max-md:hidden"
                 style={{ background: activeProject.color }}
               />
               <select
@@ -594,7 +607,7 @@ export default function Workspace() {
                 onChange={(e) => movePage(activePage.id, e.target.value)}
                 disabled={!isOwner}
                 title={isOwner ? 'Mover para outro projeto' : 'Só o dono pode mover a página'}
-                className="cursor-pointer appearance-none rounded-md bg-transparent py-0.5 text-[13px] font-medium text-slate-500 outline-none transition hover:text-slate-800"
+                className="cursor-pointer appearance-none rounded-md bg-transparent py-0.5 text-[13px] font-medium text-slate-500 outline-none transition hover:text-slate-800 max-md:hidden"
               >
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -602,7 +615,7 @@ export default function Workspace() {
                   </option>
                 ))}
               </select>
-              <span className="text-slate-300">/</span>
+              <span className="text-slate-300 max-md:hidden">/</span>
             </>
           )}
 
@@ -628,20 +641,28 @@ export default function Workspace() {
               title={others.join(', ') + ' com esta pagina aberta'}
               className="shrink-0 rounded-md bg-amber-50 px-2 py-1 text-[11.5px] font-medium text-amber-700"
             >
-              {others.length === 1 ? `${others[0]} está aqui` : `${others.length} pessoas aqui`}
+              <span className="max-md:hidden">
+                {others.length === 1 ? `${others[0]} está aqui` : `${others.length} pessoas aqui`}
+              </span>
+              <span className="md:hidden">{others.length}</span>
             </span>
           )}
 
           {isOwner && (
             <button
               onClick={() => setShowShare(true)}
+              title="Compartilhar"
               className="shrink-0 rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
             >
-              Compartilhar
+              <span className="max-md:hidden">Compartilhar</span>
+              <svg className="md:hidden" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="2.6" /><circle cx="6" cy="12" r="2.6" /><circle cx="18" cy="19" r="2.6" />
+                <path d="M8.3 10.8l7.4-4.3M8.3 13.2l7.4 4.3" />
+              </svg>
             </button>
           )}
 
-          <span className="shrink-0 text-xs text-slate-400">
+          <span className="shrink-0 text-xs text-slate-400 max-md:hidden">
             {saving ? 'Salvando...' : 'Salvo'}
           </span>
         </header>
@@ -669,7 +690,12 @@ export default function Workspace() {
                 canRedo={histIndex.current < history.current.length - 1}
               />
               {canEdit && (
-                <Toolbar tool={tool} setTool={setTool} onUploadImage={uploadImage} />
+                <Toolbar
+                  tool={tool}
+                  setTool={setTool}
+                  onUploadImage={uploadImage}
+                  hiddenOnMobile={selectedIds.length > 0}
+                />
               )}
             </div>
             {canEdit && (
@@ -684,6 +710,7 @@ export default function Workspace() {
               onDuplicate={duplicateSelected}
               onBringToFront={() => reorder(true)}
               onSendToBack={() => reorder(false)}
+              onDeselect={() => setSelectedIds([])}
             />
             )}
           </div>

@@ -286,6 +286,12 @@ scripts/
 
 ## No celular
 
-As páginas de texto e as tabelas funcionam bem no celular. O canvas é desktop-first
-— barra lateral, quadro e painel lado a lado — e fica apertado numa tela pequena.
-Adaptar isso é um trabalho à parte, ainda não feito.
+A interface se adapta abaixo de 768px:
+
+- A barra lateral vira **gaveta**, aberta pelo botão de menu e fechada ao escolher uma página
+- A barra de ferramentas vai para o **rodapé**, na horizontal, com rolagem lateral
+- O painel de propriedades vira uma **folha que sobe** quando você seleciona algo, e a
+  barra de ferramentas sai de cena enquanto ela está aberta
+- **Pinça com dois dedos** dá zoom e arrasta ao mesmo tempo, ancorada no ponto entre os dedos
+- A página de assistentes empilha: a lista vira uma tira horizontal e o editor ocupa a largura
+- As tabelas rolam na horizontal em vez de espremer as colunas

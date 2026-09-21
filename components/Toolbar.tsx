@@ -110,20 +110,35 @@ interface Props {
   tool: Tool;
   setTool: (t: Tool) => void;
   onUploadImage: (file: File) => void;
+  /** no celular a barra sai de cena quando o painel de edicao sobe */
+  hiddenOnMobile: boolean;
 }
 
-export default function Toolbar({ tool, setTool, onUploadImage }: Props) {
+export default function Toolbar({ tool, setTool, onUploadImage, hiddenOnMobile }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const buttonClass = (active: boolean) =>
-    'relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors ' +
+    'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ' +
     (active
       ? 'bg-blue-50 text-blue-600'
       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800');
 
   return (
-    <div className="absolute left-4 top-1/2 z-10 -translate-y-1/2">
-      <div className="flex flex-col gap-0.5 rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-lg shadow-slate-900/[0.06] backdrop-blur">
+    <div
+      className={
+        // celular: barra horizontal no rodape. desktop: pilula vertical a esquerda
+        'z-10 max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:px-2 max-md:pb-2 ' +
+        'md:absolute md:left-4 md:top-1/2 md:-translate-y-1/2 ' +
+        (hiddenOnMobile ? 'max-md:hidden' : '')
+      }
+    >
+      <div
+        className={
+          'flex gap-0.5 border border-slate-200/80 bg-white/95 shadow-lg shadow-slate-900/[0.06] backdrop-blur ' +
+          'max-md:overflow-x-auto max-md:rounded-2xl max-md:p-1.5 ' +
+          'md:flex-col md:rounded-2xl md:p-1.5'
+        }
+      >
         {TOOLS.map((t) => (
           <button
             key={t.id}
@@ -137,7 +152,7 @@ export default function Toolbar({ tool, setTool, onUploadImage }: Props) {
           </button>
         ))}
 
-        <div className="mx-2 my-1 h-px bg-slate-200/80" />
+        <div className="shrink-0 bg-slate-200/80 max-md:my-1.5 max-md:w-px md:mx-2 md:my-1 md:h-px" />
 
         <button
           onClick={() => fileRef.current?.click()}
