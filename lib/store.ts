@@ -94,9 +94,16 @@ export async function readWorkspace(me: Me): Promise<Workspace> {
     : [];
 
   if (projects.length === 0) {
+    // createProject ja cria o quadro inicial; criar outro aqui duplicava a pagina.
     const project = await createProject(me.id, 'Meu primeiro projeto');
-    const page = await createPage(me.id, project.id, 'Quadro inicial', 'canvas');
-    return { me, projects: [project], assistants: [], pages: page ? [page] : [] };
+    const created = await sql`
+      SELECT * FROM pages WHERE project_id = ${project.id} ORDER BY created_at`;
+    return {
+      me,
+      projects: [project],
+      assistants: [],
+      pages: created.map((r) => toPage({ ...r, role: 'owner' })),
+    };
   }
 
   return {

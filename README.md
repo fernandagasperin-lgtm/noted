@@ -54,16 +54,39 @@ Edição simultânea de verdade, estilo Miro, é um projeto à parte.
 
 Por isso o padrão ao compartilhar é **Leitor**. Dê Editor só a quem precisa.
 
-### Conferir que a permissão está funcionando
+### A primeira conta
 
-Com o servidor rodando e apontando para um banco **de teste** (vazio):
+A conta de administrador só pode ser criada por quem souber o `SETUP_CODE`, uma variável
+de ambiente que você define na hospedagem. Sem ela, a tela de instalação nem aparece.
+
+Isso fecha a janela entre o deploy e a sua primeira visita: sem o código, alguém que
+descobrisse o endereço nesse intervalo poderia criar a conta de administrador e ficar
+com o workspace. Depois de criar a sua conta, a variável pode ser removida.
+
+## Testes
 
 ```bash
-node scripts/smoke-test.mjs
+npm test
 ```
 
-Ele cria duas contas e verifica o modelo inteiro: isolamento, convite de uso único,
-leitor que não escreve, editor que não renomeia nem exclui, e revogação de acesso.
+Roda o modelo de dados e de permissão contra um Postgres de verdade — o **PGlite**,
+que é o Postgres compilado para WebAssembly e roda dentro do Node. Não precisa de banco
+externo nem de Docker. São 56 verificações: contas, convites de uso único, isolamento
+entre pessoas, papéis de leitor e editor, revogação, JSONB, links órfãos e presença.
+
+Para exercitar o app inteiro por HTTP (middleware, cookies, rotas), suba um Postgres e
+rode o servidor apontando para ele:
+
+```bash
+node scripts/pglite-server.mjs
+DATABASE_URL=postgres://postgres@127.0.0.1:5433/postgres APP_SECRET=... SETUP_CODE=... npm run dev
+SETUP_CODE=... node scripts/smoke-test.mjs
+```
+
+Aviso: o `pglite-server.mjs` aceita **uma conexão por vez** e trava quando chega uma
+segunda. Serve para o smoke test, que é sequencial, mas não para navegar na interface —
+para isso use um banco de verdade. O `npm test` não tem essa limitação porque fala com o
+PGlite dentro do mesmo processo.
 
 ## Hospedagem
 

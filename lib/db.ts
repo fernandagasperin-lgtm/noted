@@ -1,10 +1,26 @@
 import { Pool } from 'pg';
 
+interface QueryRunner {
+  query(text: string, values: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+}
+
 let pool: Pool | null = null;
+let testRunner: QueryRunner | null = null;
+
+/** Lets the test suite point the same queries at an in-process Postgres.
+ *  Refused in production so it can never become a backdoor. */
+export function useTestDatabase(runner: QueryRunner | null): void {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('useTestDatabase nao pode ser chamado em producao.');
+  }
+  testRunner = runner;
+  ready = null;
+}
 
 /** Resolved on first query, not at import time, so builds and the login page
  *  work without a database configured. */
-function getPool(): Pool {
+function getRunner(): QueryRunner {
+  if (testRunner) return testRunner;
   if (!pool) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
@@ -12,10 +28,12 @@ function getPool(): Pool {
         'DATABASE_URL nao configurada. Copie a connection string do painel do Supabase para o .env.local (ou para as variaveis de ambiente da hospedagem).',
       );
     }
+    // Postgres gerenciado exige TLS e serve um certificado cuja raiz o container
+    // nao conhece; um banco local nao fala TLS nenhum.
+    const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1)(:|\/)/.test(connectionString);
     pool = new Pool({
       connectionString,
-      // Managed Postgres serves a certificate the container does not have a root for.
-      ssl: { rejectUnauthorized: false },
+      ssl: isLocal ? false : { rejectUnauthorized: false },
       max: 8,
       idleTimeoutMillis: 30_000,
     });
@@ -35,7 +53,7 @@ export async function sql(
     (acc, part, i) => acc + part + (i < values.length ? `$${i + 1}` : ''),
     '',
   );
-  const result = await getPool().query(text, values);
+  const result = await getRunner().query(text, values);
   return result.rows;
 }
 

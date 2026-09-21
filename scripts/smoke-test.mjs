@@ -3,12 +3,13 @@
 // Uso:
 //   1. tenha DATABASE_URL e APP_SECRET no .env.local
 //   2. num terminal:  npm run dev
-//   3. noutro:        node scripts/smoke-test.mjs
+//   3. noutro:        SETUP_CODE=<o mesmo do servidor> node scripts/smoke-test.mjs
 //
 // ATENCAO: use um banco de teste. O roteiro cria contas e paginas, e so
 // funciona num workspace que ainda nao tem nenhuma conta.
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
+const SETUP_CODE = process.env.SETUP_CODE ?? '';
 
 let failures = 0;
 function check(label, condition, detail = '') {
@@ -70,7 +71,12 @@ if (status.data?.hasUsers) {
   const r = await call('/api/setup', {
     method: 'POST',
     as: alice,
-    body: { email: 'alice@teste.com', name: 'Alice', password: 'senha-alice-1' },
+    body: {
+      email: 'alice@teste.com',
+      name: 'Alice',
+      password: 'senha-alice-1',
+      code: SETUP_CODE,
+    },
   });
   check('primeira conta vira admin', r.status === 200, `status ${r.status}`);
 }

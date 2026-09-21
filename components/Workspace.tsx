@@ -97,7 +97,14 @@ export default function Workspace() {
   }, [pages]);
 
   const loadWorkspace = useCallback(async (selectPageId?: string) => {
-    const ws = await fetch('/api/pages').then((r) => r.json());
+    const res = await fetch('/api/pages');
+    if (!res.ok) {
+      // Sessao expirada ou conta removida: sem isso a tela quebrava ao ler
+      // a resposta de erro como se fosse o workspace.
+      window.location.href = '/login';
+      return { me: null, projects: [], assistants: [], pages: [] };
+    }
+    const ws = await res.json();
     setMe(ws.me);
     setProjects(ws.projects);
     setAssistants(ws.assistants ?? []);
