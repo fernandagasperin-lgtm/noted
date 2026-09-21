@@ -13,9 +13,8 @@ npm run dev
 
 Abra http://localhost:3000
 
-Os dados vivem num banco Postgres na nuvem, então mesmo local você precisa de
-`DATABASE_URL` e `APP_SECRET` no `.env.local` (a connection string sai do painel do
-Neon). O login vale igual no local — use a mesma conta.
+Os dados vivem num Postgres, então mesmo local você precisa de `DATABASE_URL` e
+`APP_SECRET` no `.env.local`. O login vale igual no local — use a mesma conta.
 
 ## Contas, convites e permissões
 
@@ -68,45 +67,76 @@ leitor que não escreve, editor que não renomeia nem exclui, e revogação de a
 
 ## Hospedagem
 
-O app roda na Vercel com três serviços: **Neon Postgres** (dados), **Vercel Blob**
-(imagens) e a **API da Anthropic** (geração). Todos têm plano gratuito para este volume.
+O app roda na **Hostinger** (plano Business ou Cloud, que são os que incluem Node.js),
+no seu próprio domínio. De fora vem só o **Supabase**, que guarda o banco e as imagens —
+é armazenamento, não alguém hospedando o painel.
 
-Passo a passo, a partir de uma conta na Vercel:
+| Peça | Onde |
+| --- | --- |
+| App e subdomínio | Hostinger, sua conta |
+| Banco e imagens | Supabase |
+| Geração de texto | API da Anthropic |
 
-1. Suba o projeto para um repositório no GitHub e importe ele na Vercel.
-2. No painel do projeto, aba **Storage**, crie um banco **Neon Postgres** e um
-   **Blob store**. Isso preenche `DATABASE_URL` e `BLOB_READ_WRITE_TOKEN` sozinho.
-3. Em **Settings → Environment Variables**, adicione:
-   - `APP_SECRET` — string aleatória longa, assina o cookie de sessão; gere com
-     `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-   - `ANTHROPIC_API_KEY` — opcional, liga o botão "Gerar com Claude"
-4. Faça o deploy. As tabelas são criadas sozinhas no primeiro acesso, e a primeira
-   pessoa a abrir o app cria a conta de administrador.
+### 1. Supabase
 
-Se o app subir sem `APP_SECRET`, ele recusa todo acesso com uma mensagem em vez de
-ficar aberto na internet.
+1. Crie um projeto em supabase.com (plano gratuito serve).
+2. Em **Project Settings → Database**, copie a *connection string* → é a `DATABASE_URL`.
+   Se a conexão direta não funcionar a partir da Hostinger, use a do **Session pooler**.
+3. Em **Storage**, crie um bucket chamado `uploads` e marque como **público** — senão as
+   imagens não carregam no quadro.
+4. Em **Project Settings → API**, copie a *URL* e a *service_role key* → `SUPABASE_URL`
+   e `SUPABASE_SERVICE_ROLE_KEY`.
 
-### Domínio próprio
+A service_role key dá acesso total ao projeto. Ela fica só nas variáveis de ambiente do
+servidor, nunca no navegador e nunca no git.
 
-Um subdomínio é roteado independente do domínio raiz, então seu site atual fica onde está:
+### 2. Subdomínio na Hostinger
 
-1. Na Vercel, **Settings → Domains**, adicione `ideias.seudominio.com.br`
-2. No DNS do seu registrador, crie um **CNAME** com nome `ideias` apontando para
-   `cname.vercel-dns.com`
+No hPanel, **Domínios → Subdomínios**, crie por exemplo `ideias`. Seu site principal
+continua onde está; o subdomínio é roteado separado.
 
-O certificado SSL a Vercel emite sozinha.
+### 3. Deploy
+
+No hPanel, **Website → Node.js**, crie a aplicação apontando para o subdomínio:
+
+- Repositório do GitHub (ou envio do .zip)
+- Versão do Node: 20 ou superior
+- Comando de build: `npm run build`
+- Comando de start: `npm start`
+
+Nas variáveis de ambiente da aplicação, preencha `DATABASE_URL`, `APP_SECRET`,
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e, se quiser a geração automática,
+`ANTHROPIC_API_KEY`. Gere o `APP_SECRET` com:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+As tabelas são criadas sozinhas no primeiro acesso, e a primeira pessoa a abrir o app
+cria a conta de administrador. Se o app subir sem `APP_SECRET`, ele recusa todo acesso
+com uma mensagem em vez de ficar aberto na internet.
+
+### Trocar de hospedagem depois
+
+A dependência de fornecedor está em dois arquivos: `lib/db.ts` (qualquer Postgres serve)
+e `app/api/upload/route.ts` (Supabase Storage). Todo o resto é Next.js comum, então mudar
+para uma VPS ou outro provedor é trocar esses dois e o comando de start.
 
 ### Levar os dados locais para a nuvem
 
-Se você já usou o app localmente, copie `DATABASE_URL` para o `.env.local` e rode:
+Se você já usou o app localmente com o arquivo JSON, copie `DATABASE_URL` para o
+`.env.local` e rode:
 
 ```bash
 node --env-file=.env.local scripts/migrate-to-cloud.mjs
 ```
 
-Pode rodar mais de uma vez — ele atualiza por id em vez de duplicar. Imagens que
-ainda apontam para `/uploads/` precisam ser subidas de novo pelo app, porque o
-disco local não existe na nuvem; o script avisa quando encontra alguma.
+Pode rodar mais de uma vez — ele atualiza por id em vez de duplicar. Imagens que ainda
+apontam para `/uploads/` precisam ser enviadas de novo pelo app, porque agora elas ficam
+no Supabase; o script avisa quando encontra alguma.
+
+Depois de migrar, abra o app e crie sua conta: ela vira administradora e adota os
+projetos e páginas que vieram do arquivo.
 
 ### Geração automática (opcional)
 
@@ -188,9 +218,9 @@ opções aparecem agrupadas por projeto.
 
 ## Onde ficam os dados
 
-- **Neon Postgres** — projetos, assistentes e páginas (uma linha por página, com os
-  elementos em JSONB). Backup pelo painel do Neon.
-- **Vercel Blob** — as imagens enviadas.
+- **Supabase Postgres** — contas, projetos, assistentes e páginas (uma linha por página,
+  com os elementos em JSONB). Backup pelo painel do Supabase.
+- **Supabase Storage**, bucket `uploads` — as imagens enviadas.
 
 Uma linha por página significa que celular e computador podem editar páginas
 diferentes ao mesmo tempo sem um sobrescrever o outro.

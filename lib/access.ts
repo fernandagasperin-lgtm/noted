@@ -104,7 +104,7 @@ export async function removeShare(pageId: string, userId: string): Promise<void>
   await sql`DELETE FROM page_shares WHERE page_id = ${pageId} AND user_id = ${userId}`;
 }
 
-const PRESENCE_WINDOW_SECONDS = 45;
+const PRESENCE_WINDOW = "45 seconds";
 
 export async function touchPresence(pageId: string, userId: string): Promise<void> {
   await ensureSchema();
@@ -122,6 +122,6 @@ export async function othersOnPage(pageId: string, userId: string): Promise<stri
       JOIN users u ON u.id = pp.user_id
      WHERE pp.page_id = ${pageId}
        AND pp.user_id <> ${userId}
-       AND pp.seen_at > now() - (${PRESENCE_WINDOW_SECONDS} || ' seconds')::interval`;
+       AND pp.seen_at > now() - ${PRESENCE_WINDOW}::interval`;
   return rows.map((r) => r.name as string);
 }

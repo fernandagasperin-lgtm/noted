@@ -5,14 +5,26 @@
 // so atualiza o que ja existe em vez de duplicar.
 
 import { readFile } from 'node:fs/promises';
-import { neon } from '@neondatabase/serverless';
+import pg from 'pg';
 
 if (!process.env.DATABASE_URL) {
   console.error('Falta DATABASE_URL. Ponha em .env.local e rode com --env-file=.env.local');
   process.exit(1);
 }
 
-const sql = neon(process.env.DATABASE_URL);
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+async function sql(strings, ...values) {
+  const text = strings.reduce(
+    (acc, part, i) => acc + part + (i < values.length ? `$${i + 1}` : ''),
+    '',
+  );
+  const res = await pool.query(text, values);
+  return res.rows;
+}
 
 const ws = JSON.parse(await readFile(new URL('../data/workspace.json', import.meta.url), 'utf8'));
 
@@ -75,6 +87,8 @@ console.log(
   `Migrado: ${ws.projects?.length ?? 0} projeto(s), ` +
     `${ws.assistants?.length ?? 0} assistente(s), ${ws.pages?.length ?? 0} pagina(s).`,
 );
+
+await pool.end();
 
 if (localImages > 0) {
   console.warn(

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { ensureSchema, sql } from './db';
+import { ensureSchema, iso, sql } from './db';
 import { hashPassword, newToken, verifyPassword } from './password';
 
 export interface User {
@@ -32,7 +32,7 @@ function toUser(r: Row): User {
     email: r.email as string,
     name: r.name as string,
     isAdmin: Boolean(r.is_admin),
-    createdAt: new Date(r.created_at as string).toISOString(),
+    createdAt: iso(r.created_at),
   };
 }
 
@@ -147,9 +147,9 @@ export async function listInvites(): Promise<Invite[]> {
     kind: r.kind as InviteKind,
     email: (r.email as string) ?? null,
     userName: (r.user_name as string) ?? null,
-    expiresAt: new Date(r.expires_at as string).toISOString(),
+    expiresAt: iso(r.expires_at),
     usedAt: null,
-    createdAt: new Date(r.created_at as string).toISOString(),
+    createdAt: iso(r.created_at),
   }));
 }
 

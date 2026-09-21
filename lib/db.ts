@@ -1,26 +1,48 @@
-import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { Pool } from 'pg';
 
-let client: NeonQueryFunction<false, false> | null = null;
+let pool: Pool | null = null;
 
 /** Resolved on first query, not at import time, so builds and the login page
  *  work without a database configured. */
-function db(): NeonQueryFunction<false, false> {
-  if (!client) {
-    const url = process.env.DATABASE_URL;
-    if (!url) {
+function getPool(): Pool {
+  if (!pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
       throw new Error(
-        'DATABASE_URL nao configurada. Na Vercel ela vem do banco Neon; localmente, ponha em .env.local.',
+        'DATABASE_URL nao configurada. Copie a connection string do painel do Supabase para o .env.local (ou para as variaveis de ambiente da hospedagem).',
       );
     }
-    client = neon(url);
+    pool = new Pool({
+      connectionString,
+      // Managed Postgres serves a certificate the container does not have a root for.
+      ssl: { rejectUnauthorized: false },
+      max: 8,
+      idleTimeoutMillis: 30_000,
+    });
   }
-  return client;
+  return pool;
 }
 
-export const sql: NeonQueryFunction<false, false> = ((
+/**
+ * Tagged template that turns `sql\`... ${value} ...\`` into a parameterised query,
+ * so interpolated values are always bound, never concatenated into the SQL.
+ */
+export async function sql(
   strings: TemplateStringsArray,
   ...values: unknown[]
-) => db()(strings, ...values)) as NeonQueryFunction<false, false>;
+): Promise<Record<string, unknown>[]> {
+  const text = strings.reduce(
+    (acc, part, i) => acc + part + (i < values.length ? `$${i + 1}` : ''),
+    '',
+  );
+  const result = await getPool().query(text, values);
+  return result.rows;
+}
+
+/** Postgres hands back Date objects; the app speaks ISO strings. */
+export function iso(value: unknown): string {
+  return value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
+}
 
 let ready: Promise<void> | null = null;
 

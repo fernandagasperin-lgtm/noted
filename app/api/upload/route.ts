@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { currentUser } from '@/lib/access';
-import { put } from '@vercel/blob';
+import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { currentUser } from '@/lib/access';
+
+const BUCKET = 'uploads';
 
 const ALLOWED: Record<string, string> = {
   'image/png': '.png',
@@ -11,9 +13,25 @@ const ALLOWED: Record<string, string> = {
   'image/svg+xml': '.svg',
 };
 
+/** The service role key stays server-side; it never reaches the browser. */
+function storage() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false } }).storage.from(BUCKET);
+}
+
 export async function POST(req: Request) {
   if (!(await currentUser())) {
     return NextResponse.json({ error: 'nao autenticado' }, { status: 401 });
+  }
+
+  const bucket = storage();
+  if (!bucket) {
+    return NextResponse.json(
+      { error: 'Envio de imagem nao configurado (falta SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY).' },
+      { status: 501 },
+    );
   }
 
   const form = await req.formData();
@@ -26,10 +44,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unsupported type' }, { status: 415 });
   }
 
-  const blob = await put(`uploads/${randomUUID()}${ext}`, file, {
-    access: 'public',
-    contentType: file.type,
-  });
+  const path = `${randomUUID()}${ext}`;
+  const { error } = await bucket.upload(path, file, { contentType: file.type });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  return NextResponse.json({ src: blob.url }, { status: 201 });
+  return NextResponse.json({ src: bucket.getPublicUrl(path).data.publicUrl }, { status: 201 });
 }

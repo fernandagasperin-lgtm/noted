@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { ensureSchema, sql } from './db';
+import { ensureSchema, iso, sql } from './db';
 import {
   DEFAULT_TITLE_PATTERN,
   PROJECT_COLORS,
@@ -29,7 +29,7 @@ function toProject(r: Row, userId: string): Project {
     color: r.color as string,
     ownerId: (r.owner_id as string) ?? null,
     mine: r.owner_id === userId,
-    createdAt: new Date(r.created_at as string).toISOString(),
+    createdAt: iso(r.created_at),
   };
 }
 
@@ -41,7 +41,7 @@ function toAssistant(r: Row): Assistant {
     icon: r.icon as string,
     prompt: r.prompt as string,
     titlePattern: r.title_pattern as string,
-    createdAt: new Date(r.created_at as string).toISOString(),
+    createdAt: iso(r.created_at),
   };
 }
 
@@ -56,8 +56,8 @@ function toPage(r: Row): Page {
     icon: r.icon as string,
     elements: (r.elements ?? []) as BoardElement[],
     body: r.body as string,
-    createdAt: new Date(r.created_at as string).toISOString(),
-    updatedAt: new Date(r.updated_at as string).toISOString(),
+    createdAt: iso(r.created_at),
+    updatedAt: iso(r.updated_at),
   };
 }
 
