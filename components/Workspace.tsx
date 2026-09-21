@@ -1,0 +1,663 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
+import Sidebar from './Sidebar';
+import Toolbar, { type Tool } from './Toolbar';
+import PropertiesPanel from './PropertiesPanel';
+import AssistantsPage from './AssistantsPage';
+import TablePage from './TablePage';
+import RunAssistantDialog, { type RunResult } from './RunAssistantDialog';
+import {
+  DEFAULT_STYLE,
+  type Assistant,
+  type BoardElement,
+  type ElementType,
+  type Page,
+  type PageType,
+  type Project,
+} from '@/lib/types';
+
+const Canvas = dynamic(() => import('./Canvas'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center text-sm text-slate-400">
+      Carregando quadro...
+    </div>
+  ),
+});
+
+const DEFAULTS: Record<ElementType, { width: number; height: number; content: string }> = {
+  rectangle: { width: 180, height: 110, content: '' },
+  ellipse: { width: 140, height: 140, content: '' },
+  sticky: { width: 180, height: 180, content: '' },
+  text: { width: 260, height: 40, content: 'Texto' },
+  arrow: { width: 180, height: 0, content: '' },
+  image: { width: 320, height: 240, content: '' },
+  reference: { width: 270, height: 88, content: '' },
+  assistant: { width: 260, height: 96, content: '' },
+  derivation: { width: 270, height: 170, content: '' },
+};
+
+const FILL_BY_TYPE: Partial<Record<ElementType, string>> = {
+  rectangle: '#FFFFFF',
+  ellipse: '#FFFFFF',
+  sticky: '#FFF9B1',
+};
+
+const STROKE_BY_TYPE: Partial<Record<ElementType, string>> = {
+  rectangle: '#CBD5E1',
+  ellipse: '#CBD5E1',
+  sticky: '#334155',
+  text: '#334155',
+  arrow: '#64748B',
+};
+
+export default function Workspace() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [assistants, setAssistants] = useState<Assistant[]>([]);
+  const [pages, setPages] = useState<Page[]>([]);
+  const [activeId, setActiveId] = useState<string>('');
+  const [tool, setTool] = useState<Tool>('select');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [runTarget, setRunTarget] = useState<{
+    assistant: Assistant;
+    parent?: BoardElement;
+  } | null>(null);
+
+  const pagesRef = useRef<Page[]>([]);
+  const pendingSelect = useRef<string[] | null>(null);
+  const history = useRef<BoardElement[][]>([]);
+  const histIndex = useRef(-1);
+  const [, setHistVersion] = useState(0);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipSave = useRef(true);
+
+  const activePage = useMemo(
+    () => pages.find((p) => p.id === activeId),
+    [pages, activeId],
+  );
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activePage?.projectId),
+    [projects, activePage],
+  );
+
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
+
+  const loadWorkspace = useCallback(async (selectPageId?: string) => {
+    const ws = await fetch('/api/pages').then((r) => r.json());
+    setProjects(ws.projects);
+    setAssistants(ws.assistants ?? []);
+    setPages(ws.pages);
+    pagesRef.current = ws.pages;
+    setActiveId((current) => {
+      if (selectPageId) return selectPageId;
+      return ws.pages.some((p: Page) => p.id === current)
+        ? current
+        : ws.pages[0]?.id ?? '';
+    });
+    return ws;
+  }, []);
+
+  useEffect(() => {
+    loadWorkspace().then(() => setLoaded(true));
+    fetch('/api/generate')
+      .then((r) => r.json())
+      .then((d) => setAiEnabled(Boolean(d.enabled)))
+      .catch(() => setAiEnabled(false));
+  }, [loadWorkspace]);
+
+  // reset undo history when the active page changes
+  useEffect(() => {
+    const page = pagesRef.current.find((p) => p.id === activeId);
+    if (!page) return;
+    history.current = [page.elements];
+    histIndex.current = 0;
+    setHistVersion((v) => v + 1);
+    setSelectedIds(pendingSelect.current ?? []);
+    pendingSelect.current = null;
+    skipSave.current = true;
+  }, [activeId]);
+
+  const persist = useCallback((page: Page) => {
+    setSaving(true);
+    fetch('/api/pages/' + page.id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: page.title,
+        icon: page.icon,
+        projectId: page.projectId,
+        elements: page.elements,
+        body: page.body,
+      }),
+    }).finally(() => setSaving(false));
+  }, []);
+
+  useEffect(() => {
+    if (!loaded || !activePage) return;
+    if (skipSave.current) {
+      skipSave.current = false;
+      return;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => persist(activePage), 600);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [activePage, loaded, persist]);
+
+  // History is recorded outside the state updater: React invokes updaters twice
+  // under StrictMode, which would otherwise push every change onto the stack twice.
+  const setElements = useCallback(
+    (updater: (prev: BoardElement[]) => BoardElement[], recordHistory = true) => {
+      const current = pagesRef.current.find((p) => p.id === activeId);
+      if (!current) return;
+      const next = updater(current.elements);
+
+      if (recordHistory) {
+        history.current = history.current.slice(0, histIndex.current + 1);
+        history.current.push(next);
+        histIndex.current = history.current.length - 1;
+        setHistVersion((v) => v + 1);
+      }
+
+      pagesRef.current = pagesRef.current.map((p) =>
+        p.id === activeId ? { ...p, elements: next } : p,
+      );
+      setPages(pagesRef.current);
+    },
+    [activeId],
+  );
+
+  const createElement = useCallback(
+    (type: ElementType, x: number, y: number, extra: Partial<BoardElement> = {}) => {
+      const def = DEFAULTS[type];
+      const el: BoardElement = {
+        id: crypto.randomUUID(),
+        type,
+        x: x - def.width / 2,
+        y: y - def.height / 2,
+        width: def.width,
+        height: def.height,
+        rotation: 0,
+        content: def.content,
+        style: {
+          ...DEFAULT_STYLE,
+          fill: FILL_BY_TYPE[type] ?? DEFAULT_STYLE.fill,
+          stroke: STROKE_BY_TYPE[type] ?? DEFAULT_STYLE.stroke,
+        },
+        ...(type === 'arrow' ? { points: [0, 0, def.width, 0] } : {}),
+        ...extra,
+      };
+      setElements((prev) => [...prev, el]);
+      setSelectedIds([el.id]);
+      return el;
+    },
+    [setElements],
+  );
+
+  const projectAssistants = useMemo(
+    () => assistants.filter((a) => a.projectId === activePage?.projectId),
+    [assistants, activePage],
+  );
+
+  const handleCanvasCreate = useCallback(
+    (x: number, y: number) => {
+      if (tool === 'select') return;
+      if (tool === 'reference') {
+        const target = pages.find((p) => p.id !== activeId);
+        if (!target) {
+          alert('Crie outra pagina primeiro para poder vincula-la.');
+          return;
+        }
+        createElement('reference', x, y, { refPageId: target.id });
+        return;
+      }
+      if (tool === 'assistant') {
+        if (projectAssistants.length === 0) {
+          alert(
+            'Este projeto ainda nao tem assistentes. Crie um na pagina de Assistentes.',
+          );
+          return;
+        }
+        createElement('assistant', x, y, { assistantId: projectAssistants[0].id });
+        return;
+      }
+      createElement(tool as ElementType, x, y);
+    },
+    [tool, pages, activeId, createElement, projectAssistants],
+  );
+
+  const updateElement = useCallback(
+    (id: string, patch: Partial<BoardElement>) => {
+      setElements((prev) => prev.map((el) => (el.id === id ? { ...el, ...patch } : el)));
+    },
+    [setElements],
+  );
+
+  const deleteSelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    setElements((prev) => prev.filter((el) => !selectedIds.includes(el.id)));
+    setSelectedIds([]);
+  }, [selectedIds, setElements]);
+
+  const duplicateSelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    const source = pagesRef.current.find((p) => p.id === activeId)?.elements ?? [];
+    const copies = source
+      .filter((el) => selectedIds.includes(el.id))
+      .map((el) => ({ ...el, id: crypto.randomUUID(), x: el.x + 24, y: el.y + 24 }));
+    if (copies.length === 0) return;
+    setElements((prev) => [...prev, ...copies]);
+    setSelectedIds(copies.map((c) => c.id));
+  }, [selectedIds, activeId, setElements]);
+
+  const reorder = useCallback(
+    (toFront: boolean) => {
+      setElements((prev) => {
+        const moving = prev.filter((el) => selectedIds.includes(el.id));
+        const rest = prev.filter((el) => !selectedIds.includes(el.id));
+        return toFront ? [...rest, ...moving] : [...moving, ...rest];
+      });
+    },
+    [selectedIds, setElements],
+  );
+
+  const restoreSnapshot = useCallback(
+    (snapshot: BoardElement[]) => {
+      pagesRef.current = pagesRef.current.map((p) =>
+        p.id === activeId ? { ...p, elements: snapshot } : p,
+      );
+      setPages(pagesRef.current);
+      setSelectedIds([]);
+      setHistVersion((v) => v + 1);
+    },
+    [activeId],
+  );
+
+  const undo = useCallback(() => {
+    if (histIndex.current <= 0) return;
+    histIndex.current -= 1;
+    restoreSnapshot(history.current[histIndex.current]);
+  }, [restoreSnapshot]);
+
+  const redo = useCallback(() => {
+    if (histIndex.current >= history.current.length - 1) return;
+    histIndex.current += 1;
+    restoreSnapshot(history.current[histIndex.current]);
+  }, [restoreSnapshot]);
+
+  const uploadImage = useCallback(
+    async (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        alert('Nao foi possivel enviar a imagem.');
+        return;
+      }
+      const { src } = await res.json();
+      const img = new window.Image();
+      img.src = src;
+      img.onload = () => {
+        const scale = Math.min(1, 420 / img.width);
+        createElement('image', 420, 320, {
+          src,
+          width: img.width * scale,
+          height: img.height * scale,
+        });
+      };
+    },
+    [createElement],
+  );
+
+  /** Opening a card: assistant cards start a run, result cards branch a new variation. */
+  const openCard = useCallback(
+    (el: BoardElement) => {
+      const assistant = assistants.find((a) => a.id === el.assistantId);
+      if (!assistant) {
+        alert('O assistente deste card foi removido.');
+        return;
+      }
+      setRunTarget({
+        assistant,
+        parent: el.type === 'derivation' ? el : undefined,
+      });
+    },
+    [assistants],
+  );
+
+  const nextVariation = (assistantId: string, projectId: string) => {
+    const used = pagesRef.current
+      .filter((p) => p.projectId === projectId)
+      .flatMap((p) => p.elements)
+      .filter((e) => e.type === 'derivation' && e.assistantId === assistantId)
+      .map((e) => e.variation ?? 0);
+    return (used.length ? Math.max(...used) : 0) + 1;
+  };
+
+  const saveRun = (result: RunResult) => {
+    if (!runTarget || !activePage) return;
+    const anchor = runTarget.parent;
+    createElement(
+      'derivation',
+      (anchor ? anchor.x + anchor.width + 180 : 420) + DEFAULTS.derivation.width / 2,
+      (anchor ? anchor.y : 300) + DEFAULTS.derivation.height / 2,
+      {
+        assistantId: runTarget.assistant.id,
+        parentId: result.parentId,
+        title: result.title,
+        inputs: result.inputs,
+        output: result.output,
+        variation: result.variation,
+        producedAt: new Date().toISOString(),
+      },
+    );
+    setRunTarget(null);
+  };
+
+  const createPage = async (projectId: string, type: PageType) => {
+    const titles: Record<PageType, string> = {
+      canvas: 'Novo quadro',
+      text: 'Nova pagina',
+      table: 'Nova tabela',
+      assistants: 'Assistentes',
+    };
+    const res = await fetch('/api/pages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, title: titles[type], type }),
+    });
+    if (!res.ok) return;
+    const page: Page = await res.json();
+    setPages((prev) => [...prev, page]);
+    setActiveId(page.id);
+  };
+
+  const renamePage = (id: string, title: string) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
+    fetch('/api/pages/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+  };
+
+  const movePage = async (id: string, projectId: string) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, projectId } : p)));
+    await fetch('/api/pages/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    });
+  };
+
+  const deletePage = async (id: string) => {
+    await fetch('/api/pages/' + id, { method: 'DELETE' });
+    await loadWorkspace(id === activeId ? undefined : activeId);
+  };
+
+  const createProject = async () => {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Novo projeto' }),
+    });
+    const project: Project = await res.json();
+    const ws = await loadWorkspace();
+    const first = ws.pages.find((p: Page) => p.projectId === project.id);
+    if (first) setActiveId(first.id);
+  };
+
+  const renameProject = (id: string, name: string) => {
+    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)));
+    fetch('/api/projects/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+  };
+
+  const deleteProject = async (id: string) => {
+    await fetch('/api/projects/' + id, { method: 'DELETE' });
+    await loadWorkspace();
+  };
+
+  const createAssistant = async () => {
+    if (!activePage) return;
+    const res = await fetch('/api/assistants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: activePage.projectId, name: 'Novo assistente' }),
+    });
+    if (!res.ok) return;
+    const assistant: Assistant = await res.json();
+    setAssistants((prev) => [...prev, assistant]);
+  };
+
+  const updateAssistant = (id: string, patch: Partial<Assistant>) => {
+    setAssistants((prev) => prev.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+    fetch('/api/assistants/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+  };
+
+  const deleteAssistant = async (id: string) => {
+    await fetch('/api/assistants/' + id, { method: 'DELETE' });
+    await loadWorkspace(activeId);
+  };
+
+  const openFromTable = (pageId: string, elementId: string) => {
+    pendingSelect.current = [elementId];
+    setActiveId(pageId);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+      const mod = e.metaKey || e.ctrlKey;
+
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelected();
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSelectedIds([]);
+        setTool('select');
+        return;
+      }
+      if (mod) return;
+
+      const map: Record<string, Tool> = {
+        v: 'select',
+        s: 'sticky',
+        r: 'rectangle',
+        e: 'ellipse',
+        t: 'text',
+        a: 'arrow',
+        l: 'reference',
+        g: 'assistant',
+      };
+      const next = map[e.key.toLowerCase()];
+      if (next) setTool(next);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo, duplicateSelected, deleteSelected]);
+
+  if (!loaded || !activePage) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-slate-400">
+        Carregando...
+      </div>
+    );
+  }
+
+  const selectedElements = activePage.elements.filter((el) => selectedIds.includes(el.id));
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-800">
+      <Sidebar
+        projects={projects}
+        pages={pages}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onCreatePage={createPage}
+        onRenamePage={renamePage}
+        onDeletePage={deletePage}
+        onCreateProject={createProject}
+        onRenameProject={renameProject}
+        onDeleteProject={deleteProject}
+      />
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-2.5 border-b border-slate-200/70 px-5 py-3">
+          {activeProject && (
+            <>
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: activeProject.color }}
+              />
+              <select
+                value={activeProject.id}
+                onChange={(e) => movePage(activePage.id, e.target.value)}
+                title="Mover para outro projeto"
+                className="cursor-pointer appearance-none rounded-md bg-transparent py-0.5 text-[13px] font-medium text-slate-500 outline-none transition hover:text-slate-800"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-slate-300">/</span>
+            </>
+          )}
+
+          <span className="shrink-0 text-base">{activePage.icon}</span>
+          <input
+            value={activePage.title}
+            onChange={(e) => renamePage(activePage.id, e.target.value)}
+            className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-[17px] font-semibold tracking-tight text-slate-900 outline-none transition focus:bg-slate-50"
+          />
+
+          <span className="shrink-0 text-xs text-slate-400">
+            {saving ? 'Salvando...' : 'Salvo'}
+          </span>
+        </header>
+
+        {activePage.type === 'canvas' && (
+          <div className="flex min-h-0 flex-1">
+            <div className="relative min-w-0 flex-1">
+              <Canvas
+                key={activePage.id}
+                page={activePage}
+                pages={pages}
+                projects={projects}
+                assistants={assistants}
+                tool={tool}
+                setTool={setTool}
+                selectedIds={selectedIds}
+                setSelectedIds={setSelectedIds}
+                onCreate={handleCanvasCreate}
+                onChange={updateElement}
+                onOpenRef={setActiveId}
+                onOpenCard={openCard}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={histIndex.current > 0}
+                canRedo={histIndex.current < history.current.length - 1}
+              />
+              <Toolbar tool={tool} setTool={setTool} onUploadImage={uploadImage} />
+            </div>
+            <PropertiesPanel
+              elements={selectedElements}
+              pages={pages}
+              projects={projects}
+              assistants={projectAssistants}
+              currentPageId={activeId}
+              onChange={updateElement}
+              onDelete={deleteSelected}
+              onDuplicate={duplicateSelected}
+              onBringToFront={() => reorder(true)}
+              onSendToBack={() => reorder(false)}
+            />
+          </div>
+        )}
+
+        {activePage.type === 'text' && (
+          <div className="flex-1 overflow-y-auto">
+            <textarea
+              value={activePage.body}
+              onChange={(e) =>
+                setPages((prev) =>
+                  prev.map((p) => (p.id === activeId ? { ...p, body: e.target.value } : p)),
+                )
+              }
+              placeholder="Escreva aqui..."
+              className="mx-auto block h-full w-full max-w-3xl resize-none px-8 py-10 text-[15px] leading-7 text-slate-700 outline-none placeholder:text-slate-300"
+            />
+          </div>
+        )}
+
+        {activePage.type === 'assistants' && (
+          <AssistantsPage
+            assistants={assistants}
+            projectId={activePage.projectId}
+            onCreate={createAssistant}
+            onChange={updateAssistant}
+            onDelete={deleteAssistant}
+          />
+        )}
+
+        {activePage.type === 'table' && (
+          <TablePage
+            pages={pages}
+            assistants={assistants}
+            projectId={activePage.projectId}
+            onOpen={openFromTable}
+          />
+        )}
+      </main>
+
+      {runTarget && (
+        <RunAssistantDialog
+          assistant={runTarget.assistant}
+          parent={runTarget.parent}
+          variation={nextVariation(runTarget.assistant.id, activePage.projectId)}
+          aiEnabled={aiEnabled}
+          onClose={() => setRunTarget(null)}
+          onSave={saveRun}
+        />
+      )}
+    </div>
+  );
+}
