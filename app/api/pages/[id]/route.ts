@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { canSeeProject, currentUser, pageRole } from '@/lib/access';
+import { currentUser, ownsProject, pageRole } from '@/lib/access';
 import { deletePage, updatePage } from '@/lib/store';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -22,8 +22,12 @@ export async function PATCH(req: Request, { params }: Ctx) {
     delete patch.projectId;
     delete patch.title;
     delete patch.icon;
-  } else if (patch.projectId && !(await canSeeProject(me.id, patch.projectId))) {
-    return NextResponse.json({ error: 'sem permissao no projeto destino' }, { status: 403 });
+  } else if (patch.projectId && !(await ownsProject(me.id, patch.projectId))) {
+    // Mesmo motivo: mover uma pagina para o projeto de outra pessoa a esconderia dela.
+    return NextResponse.json(
+      { error: 'Você não é dono do projeto de destino.' },
+      { status: 403 },
+    );
   }
 
   const page = await updatePage(id, patch, role);

@@ -36,7 +36,9 @@ import {
   readWorkspace,
   updatePage,
 } from '../lib/store';
-import type { Me } from '../lib/types';
+import { buildDerivationTitle, fillTemplate, type Assistant, type Me } from '../lib/types';
+import { hashPassword, verifyPassword } from '../lib/password';
+import { createSessionToken, readSession } from '../lib/session';
 
 let passed = 0;
 let failed = 0;
@@ -57,7 +59,73 @@ function section(title: string) {
 
 const me = (id: string): Me => ({ id, name: '', email: '', isAdmin: false });
 
+async function testPureLogic() {
+  section('template de prompt');
+  check('substitui um campo', fillTemplate('faca {{x}}', { x: 'isso' }) === 'faca isso');
+  check('substitui varios', fillTemplate('{{a}} e {{b}}', { a: '1', b: '2' }) === '1 e 2');
+  check('ignora espaco dentro das chaves', fillTemplate('{{ x }}', { x: 'ok' }) === 'ok');
+  check('nao diferencia maiuscula', fillTemplate('{{Tema}}', { tema: 'cafe' }) === 'cafe');
+  check(
+    'campo desconhecido fica visivel em vez de sumir',
+    fillTemplate('faca {{z}}', { x: '1' }) === 'faca {{z}}',
+    fillTemplate('faca {{z}}', { x: '1' }),
+  );
+  check('campo vazio vira vazio', fillTemplate('[{{x}}]', { x: '' }) === '[]');
+  check('texto sem campo passa intacto', fillTemplate('nada aqui', {}) === 'nada aqui');
+  check(
+    'valor que parece campo nao e substituido de novo',
+    fillTemplate('{{a}}', { a: '{{b}}', b: 'bomba' }) === '{{b}}',
+  );
+
+  section('titulo das derivacoes');
+  const assistant = {
+    id: 'a', projectId: 'p', name: 'Roteiro', icon: '✦',
+    prompt: '', titlePattern: '{{assistente}} · {{variacao}}', createdAt: '',
+  } satisfies Assistant;
+  check(
+    'monta com nome e numero da variacao',
+    buildDerivationTitle(assistant, 3, {}) === 'Roteiro · v3',
+    buildDerivationTitle(assistant, 3, {}),
+  );
+  check(
+    'usa os campos preenchidos',
+    buildDerivationTitle({ ...assistant, titlePattern: 'R · {{trecho}} · {{variacao}}' }, 1,
+      { trecho: 'abertura' }) === 'R · abertura · v1',
+  );
+  check(
+    'padrao vazio cai no padrao da casa',
+    buildDerivationTitle({ ...assistant, titlePattern: '' }, 2, {}) === 'Roteiro · v2',
+  );
+
+  section('senha');
+  const h1 = await hashPassword('mesma-senha');
+  const h2 = await hashPassword('mesma-senha');
+  check('duas senhas iguais geram hashes diferentes (sal)', h1 !== h2);
+  check('a senha certa confere nos dois', (await verifyPassword('mesma-senha', h1)) &&
+    (await verifyPassword('mesma-senha', h2)));
+  check('senha errada nao confere', !(await verifyPassword('outra', h1)));
+  check('hash malformado nao confere', !(await verifyPassword('x', 'lixo')));
+  check('hash vazio nao confere', !(await verifyPassword('x', '')));
+  check('hash truncado nao confere', !(await verifyPassword('x', h1.slice(0, 20))));
+
+  section('sessao');
+  process.env.APP_SECRET = 'segredo-de-teste-bem-longo-para-assinar-1234567890';
+  const token = await createSessionToken('usuario-123');
+  check('token valido devolve o dono', (await readSession(token)) === 'usuario-123');
+  check('token adulterado e recusado', (await readSession(token.slice(0, -3) + 'aaa')) === null);
+  check('token vazio e recusado', (await readSession('')) === null);
+  check('lixo e recusado', (await readSession('nao.e.um.jwt')) === null);
+
+  const original = process.env.APP_SECRET;
+  process.env.APP_SECRET = 'outro-segredo-completamente-diferente-0987654321';
+  check('token assinado com outro segredo e recusado', (await readSession(token)) === null);
+  process.env.APP_SECRET = original;
+  check('e volta a valer com o segredo certo', (await readSession(token)) === 'usuario-123');
+}
+
 async function main() {
+  await testPureLogic();
+
   const pg = new PGlite();
   useTestDatabase({
     query: (text, values) => pg.query(text, values) as Promise<{ rows: Record<string, unknown>[] }>,

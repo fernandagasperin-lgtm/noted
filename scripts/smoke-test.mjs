@@ -189,6 +189,76 @@ console.log('\n--- promover a editor ---');
   check('editor nao exclui a pagina', del.status === 403, `status ${del.status}`);
 }
 
+console.log('\n--- limites de projeto ---');
+{
+  const wsBob = await call('/api/pages', { as: bob });
+  const bobProject = wsBob.data.projects.find((p) => p.mine);
+  const aliceProject = wsA.data.projects[0];
+
+  const rename = await call('/api/projects/' + aliceProject.id, {
+    method: 'PATCH',
+    as: bob,
+    body: { name: 'tomado' },
+  });
+  check('so o dono renomeia o projeto', rename.status === 403, `status ${rename.status}`);
+
+  const del = await call('/api/projects/' + aliceProject.id, { method: 'DELETE', as: bob });
+  check('so o dono exclui o projeto', del.status === 403, `status ${del.status}`);
+
+  const assistant = await call('/api/assistants', {
+    method: 'POST',
+    as: bob,
+    body: { projectId: aliceProject.id, name: 'intruso' },
+  });
+  check('so o dono cria assistente no projeto', assistant.status === 403, `status ${assistant.status}`);
+
+  const intruder = await call('/api/pages', {
+    method: 'POST',
+    as: bob,
+    body: { projectId: aliceProject.id, title: 'intrusa', type: 'canvas' },
+  });
+  check('sem acesso ao projeto, nao cria pagina nele', intruder.status === 403, `status ${intruder.status}`);
+
+  const own = await call('/api/pages', {
+    method: 'POST',
+    as: bob,
+    body: { projectId: bobProject.id, title: 'minha', type: 'canvas' },
+  });
+  check('mas cria no proprio projeto', own.status === 201, `status ${own.status}`);
+
+  const moved = await call('/api/pages/' + own.data.id, {
+    method: 'PATCH',
+    as: bob,
+    body: { projectId: aliceProject.id },
+  });
+  check('nem move uma pagina propria para o projeto de outra pessoa',
+    moved.status === 403, `status ${moved.status}`);
+}
+
+console.log('\n--- rotas que exigem sessao ---');
+{
+  const anonimas = [
+    ['presenca', '/api/presence', 'POST', { pageId: page.id }],
+    ['geracao', '/api/generate', 'POST', { prompt: 'oi' }],
+    ['lista de pessoas', '/api/users', 'GET', undefined],
+    ['convites', '/api/invites', 'GET', undefined],
+  ];
+  for (const [label, path, method, body] of anonimas) {
+    const r = await call(path, { method, body });
+    check(`${label} recusa quem nao entrou`, r.status === 401, `status ${r.status}`);
+  }
+
+  const invites = await call('/api/invites', { as: bob });
+  check('lista de convites e so para admin', invites.status === 403, `status ${invites.status}`);
+
+  const newInvite = await call('/api/invites', {
+    method: 'POST',
+    as: bob,
+    body: { kind: 'invite', email: 'quem@quer.com' },
+  });
+  check('quem nao e admin nao convida', newInvite.status === 403, `status ${newInvite.status}`);
+}
+
 console.log('\n--- revogar ---');
 {
   await call(`/api/pages/${page.id}/shares`, {
@@ -201,6 +271,13 @@ console.log('\n--- revogar ---');
     'Bob perde o acesso ao ser removido',
     !wsB.data.pages.some((p) => p.id === page.id),
   );
+
+  const presence = await call('/api/presence', {
+    method: 'POST',
+    as: bob,
+    body: { pageId: page.id },
+  });
+  check('e a presenca na pagina tambem e recusada', presence.status === 403, `status ${presence.status}`);
 }
 
 console.log(

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { canSeeProject, currentUser } from '@/lib/access';
+import { currentUser, ownsProject } from '@/lib/access';
 import { createPage, readWorkspace } from '@/lib/store';
 
 export async function GET() {
@@ -13,8 +13,13 @@ export async function POST(req: Request) {
   if (!me) return NextResponse.json({ error: 'nao autenticado' }, { status: 401 });
 
   const body = await req.json();
-  if (!(await canSeeProject(me.id, body.projectId))) {
-    return NextResponse.json({ error: 'sem permissao' }, { status: 403 });
+  // Ver uma pagina compartilhada dentro de um projeto nao da direito de criar
+  // paginas nele: elas nasceriam invisiveis para o dono do projeto.
+  if (!(await ownsProject(me.id, body.projectId))) {
+    return NextResponse.json(
+      { error: 'So o dono do projeto pode criar paginas nele.' },
+      { status: 403 },
+    );
   }
 
   const page = await createPage(me.id, body.projectId, body.title ?? 'Sem titulo', body.type ?? 'canvas');
