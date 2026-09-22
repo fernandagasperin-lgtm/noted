@@ -46,6 +46,8 @@ import {
 import { buildDerivationTitle, fillTemplate, type Assistant, type Me } from '../lib/types';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { createSessionToken, readSession } from '../lib/session';
+import { applyFilters, applySorts, opsFor, type TableFilter } from '../lib/table';
+import type { DbColumn, DbRow } from '../lib/types';
 
 let passed = 0;
 let failed = 0;
@@ -130,8 +132,80 @@ async function testPureLogic() {
   check('e volta a valer com o segredo certo', (await readSession(token)) === 'usuario-123');
 }
 
+function testarTabela() {
+  const col = (id: string, type: DbColumn['type'], options: DbColumn['options'] = []) =>
+    ({ id, pageId: 'p', name: id, type, options, format: 'plain', width: 180, position: 0 }) as DbColumn;
+
+  const linha = (id: string, title: string, values: Record<string, unknown>) =>
+    ({ id, pageId: 'p', title, values, body: '', position: 0, createdAt: '', updatedAt: '' }) as DbRow;
+
+  const preco = col('preco', 'number');
+  const loja = col('loja', 'multi', [
+    { id: 'o1', name: 'nissei', color: '#fff' },
+    { id: 'o2', name: 'cellshop', color: '#fff' },
+  ]);
+  const feito = col('feito', 'check');
+  const colunas = [preco, loja, feito];
+
+  const linhas = [
+    linha('a', 'Drone', { preco: 2784, loja: ['o1'], feito: true }),
+    linha('b', 'Iphone', { preco: 5305, loja: ['o1', 'o2'] }),
+    linha('c', 'Cabo', { loja: [] }),
+  ];
+
+  const f = (columnId: string, op: TableFilter['op'], value = ''): TableFilter[] => [
+    { id: 'f', columnId, op, value },
+  ];
+  const ids = (rs: DbRow[]) => rs.map((r) => r.id).join(',');
+
+  section('filtros');
+  check('maior que compara numero, nao texto',
+    ids(applyFilters(linhas, colunas, f('preco', 'gt', '3000'))) === 'b');
+  check('menor que', ids(applyFilters(linhas, colunas, f('preco', 'lt', '3000'))) === 'a');
+  check('vazio pega quem nao tem valor',
+    ids(applyFilters(linhas, colunas, f('preco', 'empty'))) === 'c');
+  check('nao vazio pega o resto',
+    ids(applyFilters(linhas, colunas, f('preco', 'notEmpty'))) === 'a,b');
+  check('multi-selecao compara pelo nome, nao pelo id',
+    ids(applyFilters(linhas, colunas, f('loja', 'contains', 'cellshop'))) === 'b');
+  check('nao contem exclui quem tem',
+    ids(applyFilters(linhas, colunas, f('loja', 'notContains', 'nissei'))) === 'c');
+  check('lista vazia conta como vazia',
+    ids(applyFilters(linhas, colunas, f('loja', 'empty'))) === 'c');
+  check('caixa marcada', ids(applyFilters(linhas, colunas, f('feito', 'checked'))) === 'a');
+  check('caixa nao marcada', ids(applyFilters(linhas, colunas, f('feito', 'unchecked'))) === 'b,c');
+  check('contem no titulo ignora maiuscula',
+    ids(applyFilters(linhas, colunas, f('title', 'contains', 'DRONE'))) === 'a');
+  check('filtro sem valor nao esconde nada',
+    ids(applyFilters(linhas, colunas, f('title', 'contains', '  '))) === 'a,b,c');
+  check('filtro sobre coluna apagada e ignorado',
+    ids(applyFilters(linhas, colunas, f('sumiu', 'contains', 'x'))) === 'a,b,c');
+  check('dois filtros precisam passar os dois',
+    ids(applyFilters(linhas, colunas, [
+      { id: '1', columnId: 'preco', op: 'notEmpty', value: '' },
+      { id: '2', columnId: 'loja', op: 'contains', value: 'cellshop' },
+    ])) === 'b');
+
+  section('ordenacao');
+  check('numero crescente',
+    ids(applySorts(linhas, colunas, [{ columnId: 'preco', direction: 'asc' }])) === 'a,b,c');
+  check('numero decrescente, com vazio sempre no fim',
+    ids(applySorts(linhas, colunas, [{ columnId: 'preco', direction: 'desc' }])) === 'b,a,c',
+    ids(applySorts(linhas, colunas, [{ columnId: 'preco', direction: 'desc' }])));
+  check('texto em ordem alfabetica',
+    ids(applySorts(linhas, colunas, [{ columnId: 'title', direction: 'asc' }])) === 'c,a,b');
+  check('ordenar nao altera a lista original', ids(linhas) === 'a,b,c');
+  check('sem criterio, mantem a ordem', ids(applySorts(linhas, colunas, [])) === 'a,b,c');
+
+  section('operadores por tipo');
+  check('caixa so oferece marcada/nao marcada', opsFor('check').join(',') === 'checked,unchecked');
+  check('numero oferece maior e menor', opsFor('number').includes('gt'));
+  check('texto nao oferece maior que', !opsFor('text').includes('gt'));
+}
+
 async function main() {
   await testPureLogic();
+  testarTabela();
 
   const pg = new PGlite();
   useTestDatabase({

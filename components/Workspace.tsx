@@ -759,6 +759,18 @@ export default function Workspace() {
             pageId={activePage.id}
             canEdit={canEdit}
             titleWidth={activePage.titleWidth}
+            sorts={activePage.sorts}
+            filters={activePage.filters}
+            onView={(patch) => {
+              setPages((prev) =>
+                prev.map((p) => (p.id === activePage.id ? { ...p, ...patch } : p)),
+              );
+              fetch('/api/pages/' + activePage.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patch),
+              });
+            }}
             onTitleWidth={(w) => {
               setPages((prev) =>
                 prev.map((p) => (p.id === activePage.id ? { ...p, titleWidth: w } : p)),

@@ -13,15 +13,37 @@ import {
 } from '@/lib/types';
 import RowDialog from './RowDialog';
 import Icon, { TYPE_COLOR } from './Icon';
+import {
+  OP_LABELS,
+  applyFilters,
+  applySorts,
+  opNeedsValue,
+  opsFor,
+  type FilterOp,
+  type TableFilter,
+  type TableSort,
+} from '@/lib/table';
 
 interface Props {
   pageId: string;
   canEdit: boolean;
   titleWidth: number;
   onTitleWidth: (width: number) => void;
+  sorts: TableSort[];
+  filters: TableFilter[];
+  onView: (patch: { sorts?: TableSort[]; filters?: TableFilter[] }) => void;
 }
 
-export default function DatabasePage({ pageId, canEdit, titleWidth, onTitleWidth }: Props) {
+export default function DatabasePage({
+  pageId,
+  canEdit,
+  titleWidth,
+  onTitleWidth,
+  sorts,
+  filters,
+  onView,
+}: Props) {
+  const [painel, setPainel] = useState<'sort' | 'filter' | null>(null);
   const [columns, setColumns] = useState<DbColumn[]>([]);
   const [rows, setRows] = useState<DbRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,6 +209,15 @@ export default function DatabasePage({ pageId, canEdit, titleWidth, onTitleWidth
     return option;
   };
 
+  /** A coluna de titulo nao vive em db_columns, mas serve de criterio. */
+  const criterios = [
+    { id: 'title', nome: 'Nome', type: 'text' as ColumnType },
+    ...columns.map((c) => ({ id: c.id, nome: c.name, type: c.type })),
+  ];
+  const tipoDe = (id: string) => criterios.find((c) => c.id === id)?.type ?? 'text';
+
+  const visiveis = applySorts(applyFilters(rows, columns, filters), columns, sorts);
+
   if (loading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center text-[13px] text-[#9B9A97]">
@@ -198,8 +229,182 @@ export default function DatabasePage({ pageId, canEdit, titleWidth, onTitleWidth
   const cellBase =
     'border-b border-r border-[#E9E9E7] px-2 py-1.5 text-[14px] text-[#37352F] align-top';
 
+  const botaoBarra = (ativo: boolean) =>
+    'flex items-center gap-1.5 rounded px-2 py-1 text-[13px] transition ' +
+    (ativo ? 'bg-[#E7F3F8] text-[#2383E2]' : 'text-[#787774] hover:bg-[#F1F1EF]');
+
+  const seletorDeCriterio = (valor: string, aoTrocar: (id: string) => void) => (
+    <select
+      value={valor}
+      onChange={(e) => aoTrocar(e.target.value)}
+      className="min-w-0 flex-1 rounded border border-[#E9E9E7] px-1.5 py-1 text-[13px] outline-none"
+    >
+      {criterios.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.nome}
+        </option>
+      ))}
+    </select>
+  );
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {canEdit && (
+        <div className="relative flex shrink-0 items-center gap-1 border-b border-[#E9E9E7] px-3 py-1.5">
+          <button
+            onClick={() => setPainel(painel === 'filter' ? null : 'filter')}
+            className={botaoBarra(filters.length > 0)}
+          >
+            Filtrar
+            {filters.length > 0 && <span>{filters.length}</span>}
+          </button>
+          <button
+            onClick={() => setPainel(painel === 'sort' ? null : 'sort')}
+            className={botaoBarra(sorts.length > 0)}
+          >
+            Ordenar
+            {sorts.length > 0 && <span>{sorts.length}</span>}
+          </button>
+
+          <span className="ml-auto text-[12px] text-[#9B9A97]">
+            {visiveis.length === rows.length
+              ? rows.length + (rows.length === 1 ? ' linha' : ' linhas')
+              : visiveis.length + ' de ' + rows.length}
+          </span>
+
+          {painel && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setPainel(null)} />
+              <div className="absolute left-3 top-9 z-30 w-[23rem] rounded-lg border border-[#E9E9E7] bg-white p-2 shadow-xl">
+                {painel === 'sort' ? (
+                  <>
+                    {sorts.length === 0 && (
+                      <p className="px-1 py-2 text-[13px] text-[#9B9A97]">Nenhuma ordenacao.</p>
+                    )}
+                    {sorts.map((criterio, i) => (
+                      <div key={i} className="mb-1 flex items-center gap-1">
+                        {seletorDeCriterio(criterio.columnId, (id) =>
+                          onView({
+                            sorts: sorts.map((x, j) => (j === i ? { ...x, columnId: id } : x)),
+                          }),
+                        )}
+                        <select
+                          value={criterio.direction}
+                          onChange={(e) =>
+                            onView({
+                              sorts: sorts.map((x, j) =>
+                                j === i
+                                  ? { ...x, direction: e.target.value as 'asc' | 'desc' }
+                                  : x,
+                              ),
+                            })
+                          }
+                          className="rounded border border-[#E9E9E7] px-1.5 py-1 text-[13px] outline-none"
+                        >
+                          <option value="asc">crescente</option>
+                          <option value="desc">decrescente</option>
+                        </select>
+                        <button
+                          onClick={() => onView({ sorts: sorts.filter((_, j) => j !== i) })}
+                          className="shrink-0 px-1 text-[#C7C6C4] hover:text-[#EB5757]"
+                        >
+                          <Icon name="close" size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() =>
+                        onView({ sorts: [...sorts, { columnId: 'title', direction: 'asc' }] })
+                      }
+                      className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[13px] text-[#787774] hover:bg-[#F1F1EF]"
+                    >
+                      <Icon name="plus" size={13} />
+                      Adicionar ordenacao
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {filters.length === 0 && (
+                      <p className="px-1 py-2 text-[13px] text-[#9B9A97]">Nenhum filtro.</p>
+                    )}
+                    {filters.map((f, i) => (
+                      <div key={f.id} className="mb-1 flex items-center gap-1">
+                        {seletorDeCriterio(f.columnId, (id) =>
+                          onView({
+                            filters: filters.map((x, j) =>
+                              j === i ? { ...x, columnId: id, op: opsFor(tipoDe(id))[0] } : x,
+                            ),
+                          }),
+                        )}
+                        <select
+                          value={f.op}
+                          onChange={(e) =>
+                            onView({
+                              filters: filters.map((x, j) =>
+                                j === i ? { ...x, op: e.target.value as FilterOp } : x,
+                              ),
+                            })
+                          }
+                          className="rounded border border-[#E9E9E7] px-1.5 py-1 text-[13px] outline-none"
+                        >
+                          {opsFor(tipoDe(f.columnId)).map((op) => (
+                            <option key={op} value={op}>
+                              {OP_LABELS[op]}
+                            </option>
+                          ))}
+                        </select>
+                        {opNeedsValue(f.op) && (
+                          <input
+                            type={tipoDe(f.columnId) === 'date' ? 'date' : 'text'}
+                            value={f.value}
+                            onChange={(e) =>
+                              onView({
+                                filters: filters.map((x, j) =>
+                                  j === i ? { ...x, value: e.target.value } : x,
+                                ),
+                              })
+                            }
+                            placeholder="valor"
+                            className="w-20 min-w-0 rounded border border-[#E9E9E7] px-1.5 py-1 text-[13px] outline-none"
+                          />
+                        )}
+                        <button
+                          onClick={() => onView({ filters: filters.filter((_, j) => j !== i) })}
+                          className="shrink-0 px-1 text-[#C7C6C4] hover:text-[#EB5757]"
+                        >
+                          <Icon name="close" size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() =>
+                        onView({
+                          filters: [
+                            ...filters,
+                            {
+                              id: crypto.randomUUID(),
+                              columnId: 'title',
+                              op: 'contains' as FilterOp,
+                              value: '',
+                            },
+                          ],
+                        })
+                      }
+                      className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[13px] text-[#787774] hover:bg-[#F1F1EF]"
+                    >
+                      <Icon name="plus" size={13} />
+                      Adicionar filtro
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-auto">
+
       {/* table-fixed com largura explicita: sem isso o navegador dava a sobra
           para a primeira coluna e ela ignorava o redimensionamento */}
       <table
@@ -431,7 +636,7 @@ export default function DatabasePage({ pageId, canEdit, titleWidth, onTitleWidth
         </thead>
 
         <tbody>
-          {rows.map((row) => (
+          {visiveis.map((row) => (
             <tr key={row.id} className="group">
               <td
                 style={{ width: larguraTitulo, minWidth: larguraTitulo }}
@@ -512,11 +717,11 @@ export default function DatabasePage({ pageId, canEdit, titleWidth, onTitleWidth
               <td className="sticky left-0 z-10 bg-white px-2 py-2" />
               {columns.map((c) => (
                 <td key={c.id} className="px-2 py-2 text-right text-[12px] text-[#9B9A97]">
-                  {c.type === 'number' && rows.length > 0 && (
+                  {c.type === 'number' && visiveis.length > 0 && (
                     <>
                       <span className="mr-1 text-[10px] uppercase">soma</span>
                       {formatNumber(
-                        rows.reduce((total, r) => total + (Number(r.values[c.id]) || 0), 0),
+                        visiveis.reduce((total, r) => total + (Number(r.values[c.id]) || 0), 0),
                         c.format,
                       )}
                     </>
@@ -528,6 +733,8 @@ export default function DatabasePage({ pageId, canEdit, titleWidth, onTitleWidth
           </tfoot>
         )}
       </table>
+
+      </div>
 
       {openRow && (
         <RowDialog

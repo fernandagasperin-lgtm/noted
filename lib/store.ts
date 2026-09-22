@@ -57,6 +57,8 @@ function toPage(r: Row): Page {
     favorite: Boolean(r.favorite),
     sharedOut: Boolean(r.shared_out),
     titleWidth: Number(r.title_width ?? 320),
+    sorts: (r.table_sorts ?? []) as Page['sorts'],
+    filters: (r.table_filters ?? []) as Page['filters'],
     title: r.title as string,
     type: r.type as Page['type'],
     icon: r.icon as string,
@@ -204,6 +206,8 @@ export async function updatePage(
            project_id = COALESCE(${patch.projectId ?? null}, project_id),
            body = COALESCE(${patch.body ?? null}, body),
            title_width = COALESCE(${patch.titleWidth ?? null}, title_width),
+           table_sorts = COALESCE(${patch.sorts ? JSON.stringify(patch.sorts) : null}::jsonb, table_sorts),
+           table_filters = COALESCE(${patch.filters ? JSON.stringify(patch.filters) : null}::jsonb, table_filters),
            elements = COALESCE(${patch.elements ? JSON.stringify(patch.elements) : null}::jsonb, elements),
            updated_at = now()
      WHERE id = ${id}

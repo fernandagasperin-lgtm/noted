@@ -50,6 +50,8 @@ export interface BoardElement {
   producedAt?: string;
 }
 
+import type { TableFilter, TableSort } from './table';
+
 export type PageType = 'canvas' | 'text' | 'table' | 'assistants' | 'database';
 
 export type ColumnType =
@@ -177,6 +179,9 @@ export interface Page {
   sharedOut: boolean;
   /** tabelas: largura da coluna de titulo */
   titleWidth: number;
+  /** tabelas: ordenacao e filtros da visualizacao */
+  sorts: TableSort[];
+  filters: TableFilter[];
   title: string;
   type: PageType;
   icon: string;
