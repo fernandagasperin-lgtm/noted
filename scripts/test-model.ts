@@ -198,6 +198,21 @@ async function main() {
   );
   check('com um unico quadro', wsB0.pages.length === 1, `${wsB0.pages.length} paginas`);
 
+  section('espaco proprio de quem e convidada');
+  {
+    const carol = await createUser('carol@teste.com', 'Carol', 'senha-carol-1');
+    // compartilha ANTES de ela abrir o app pela primeira vez
+    await setShare(pageA.id, carol.id, 'viewer');
+    const wsC = await readWorkspace(me(carol.id));
+    check('enxerga a pagina que lhe deram', wsC.pages.some((p) => p.id === pageA.id));
+    check(
+      'e mesmo assim ganha um projeto proprio onde possa criar',
+      wsC.projects.some((p) => p.mine),
+      JSON.stringify(wsC.projects.map((p) => p.mine)),
+    );
+    await deleteUser(carol.id, alice.id);
+  }
+
   section('compartilhar como leitor');
   await setShare(pageA.id, bob.id, 'viewer');
   check('papel de Bob vira leitor', (await pageRole(bob.id, pageA.id)) === 'viewer');

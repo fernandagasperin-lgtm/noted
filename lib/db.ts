@@ -166,6 +166,13 @@ export function ensureSchema(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )`;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS page_favorites (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        PRIMARY KEY (user_id, page_id)
+      )`;
+
     await sql`CREATE INDEX IF NOT EXISTS db_columns_page_idx ON db_columns(page_id)`;
     await sql`CREATE INDEX IF NOT EXISTS db_rows_page_idx ON db_rows(page_id)`;
     await sql`CREATE INDEX IF NOT EXISTS pages_project_idx ON pages(project_id)`;

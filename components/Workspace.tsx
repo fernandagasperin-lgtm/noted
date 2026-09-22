@@ -398,6 +398,15 @@ export default function Workspace() {
     setActiveId(page.id);
   };
 
+  const toggleFavorite = async (id: string, favorite: boolean) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, favorite } : p)));
+    await fetch('/api/pages/' + id + '/favorite', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ favorite }),
+    });
+  };
+
   const renamePage = (id: string, title: string) => {
     setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
     fetch('/api/pages/' + id, {
@@ -570,6 +579,7 @@ export default function Workspace() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-800">
       <Sidebar
+        onToggleFavorite={toggleFavorite}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         me={me}

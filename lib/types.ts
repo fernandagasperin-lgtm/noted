@@ -169,6 +169,10 @@ export interface Page {
   ownerId: string | null;
   /** what the signed-in user may do with this page */
   role: PageRole;
+  /** marcada com estrela por quem esta vendo */
+  favorite: boolean;
+  /** o dono compartilhou esta pagina com alguem */
+  sharedOut: boolean;
   title: string;
   type: PageType;
   icon: string;

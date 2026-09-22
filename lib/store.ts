@@ -54,6 +54,8 @@ function toPage(r: Row): Page {
     projectId: r.project_id as string,
     ownerId: (r.owner_id as string) ?? null,
     role: (r.role as PageRole) ?? 'viewer',
+    favorite: Boolean(r.favorite),
+    sharedOut: Boolean(r.shared_out),
     title: r.title as string,
     type: r.type as Page['type'],
     icon: r.icon as string,
@@ -70,9 +72,12 @@ export async function readWorkspace(me: Me): Promise<Workspace> {
 
   const pages = await sql`
     SELECT p.*,
-           CASE WHEN p.owner_id = ${me.id} THEN 'owner' ELSE s.role END AS role
+           CASE WHEN p.owner_id = ${me.id} THEN 'owner' ELSE s.role END AS role,
+           (f.page_id IS NOT NULL) AS favorite,
+           EXISTS (SELECT 1 FROM page_shares x WHERE x.page_id = p.id) AS shared_out
       FROM pages p
       LEFT JOIN page_shares s ON s.page_id = p.id AND s.user_id = ${me.id}
+      LEFT JOIN page_favorites f ON f.page_id = p.id AND f.user_id = ${me.id}
      WHERE p.owner_id = ${me.id} OR s.user_id IS NOT NULL
      ORDER BY p.created_at`;
 
@@ -96,16 +101,24 @@ export async function readWorkspace(me: Me): Promise<Workspace> {
          ORDER BY created_at`
     : [];
 
-  if (projects.length === 0) {
+  // Precisa ter um espaco PROPRIO, e nao apenas enxergar algum: quem foi
+  // convidada e ja recebeu uma pagina compartilhada enxergaria o projeto de
+  // outra pessoa e ficaria sem lugar onde possa criar.
+  const possuiAlgum = projects.some((p) => p.owner_id === me.id);
+
+  if (!possuiAlgum) {
     // createProject ja cria o quadro inicial; criar outro aqui duplicava a pagina.
     const project = await createProject(me.id, 'Meu primeiro projeto');
     const created = await sql`
       SELECT * FROM pages WHERE project_id = ${project.id} ORDER BY created_at`;
     return {
       me,
-      projects: [project],
-      assistants: [],
-      pages: created.map((r) => toPage({ ...r, role: 'owner' })),
+      projects: [...projects.map((p) => toProject(p, me.id)), project],
+      assistants: assistants.map(toAssistant),
+      pages: [
+        ...pages.map(toPage),
+        ...created.map((r) => toPage({ ...r, role: 'owner' })),
+      ],
     };
   }
 
@@ -412,4 +425,20 @@ export async function getRowPage(id: string): Promise<string | null> {
   await ensureSchema();
   const [row] = await sql`SELECT page_id FROM db_rows WHERE id = ${id}`;
   return row ? (row.page_id as string) : null;
+}
+
+
+export async function setFavorite(
+  userId: string,
+  pageId: string,
+  favorite: boolean,
+): Promise<void> {
+  await ensureSchema();
+  if (favorite) {
+    await sql`
+      INSERT INTO page_favorites (user_id, page_id) VALUES (${userId}, ${pageId})
+      ON CONFLICT DO NOTHING`;
+  } else {
+    await sql`DELETE FROM page_favorites WHERE user_id = ${userId} AND page_id = ${pageId}`;
+  }
 }
