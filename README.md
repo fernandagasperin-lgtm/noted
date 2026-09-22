@@ -90,60 +90,56 @@ PGlite dentro do mesmo processo.
 
 ## Hospedagem
 
-O app roda na **Hostinger** (plano Business ou Cloud, que são os que incluem Node.js),
-no seu próprio domínio. De fora vem só o **Supabase**, que guarda o banco e as imagens —
-é armazenamento, não alguém hospedando o painel.
+O app roda no **Railway**, com o banco e as imagens no **Supabase**.
 
 | Peça | Onde |
 | --- | --- |
-| App e subdomínio | Hostinger, sua conta |
+| App, deploy e domínio | Railway |
 | Banco e imagens | Supabase |
 | Geração de texto | API da Anthropic |
 
+O Postgres fica no Supabase, e não no Railway, por dois motivos: lá ele é gratuito,
+enquanto no Railway consumiria do mesmo saldo do app; e as imagens precisam do
+Supabase Storage de qualquer forma, já que o disco do Railway é efêmero.
+
 ### 1. Supabase
 
-1. Crie um projeto em supabase.com (plano gratuito serve).
-2. Em **Project Settings → Database**, copie a *connection string* → é a `DATABASE_URL`.
-   Se a conexão direta não funcionar a partir da Hostinger, use a do **Session pooler**.
-3. Em **Storage**, crie um bucket chamado `uploads` e marque como **público** — senão as
-   imagens não carregam no quadro.
-4. Em **Project Settings → API**, copie a *URL* e a *service_role key* → `SUPABASE_URL`
-   e `SUPABASE_SERVICE_ROLE_KEY`.
+1. Crie um projeto em supabase.com.
+2. **Connect → Direct → Session pooler**, formato URI. É a `DATABASE_URL`. Troque
+   `[YOUR-PASSWORD]` pela senha do banco — **sem os colchetes**, que são só marcação.
+   Se a senha tiver caractere especial, codifique (`@` vira `%40`, e assim por diante).
+3. Em **Storage**, crie um bucket `uploads` marcado como **público**.
+4. Em **Project Settings → API Keys**, copie a URL do projeto e a chave `service_role`.
 
-A service_role key dá acesso total ao projeto. Ela fica só nas variáveis de ambiente do
-servidor, nunca no navegador e nunca no git.
+### 2. Railway
 
-### 2. Subdomínio na Hostinger
+**New Project → Deploy from GitHub repo**, escolhendo este repositório. Ele detecta
+Next.js sozinho e roda `npm run build` e `npm start`.
 
-No hPanel, **Domínios → Subdomínios**, crie por exemplo `ideias`. Seu site principal
-continua onde está; o subdomínio é roteado separado.
+Em **Variables**, adicione:
 
-### 3. Deploy
+| Variável | Para quê |
+| --- | --- |
+| `DATABASE_URL` | o Postgres do Supabase |
+| `APP_SECRET` | assina o cookie de login |
+| `SETUP_CODE` | libera a criação da primeira conta |
+| `SUPABASE_URL` | armazenamento de imagem |
+| `SUPABASE_SERVICE_ROLE_KEY` | idem, é secreta |
+| `PORT` | `3000`, igual ao que o domínio aponta |
+| `ANTHROPIC_API_KEY` | opcional, liga o botão "Gerar com Claude" |
 
-No hPanel, **Website → Node.js**, crie a aplicação apontando para o subdomínio:
+Em **Settings → Networking → Generate Domain**, informe a porta `3000`. Fixar a porta
+nos dois lados evita o erro em que o build fica verde mas o endereço não responde.
 
-- Repositório do GitHub (ou envio do .zip)
-- Versão do Node: 20 ou superior
-- Comando de build: `npm run build`
-- Comando de start: `npm start`
+Ainda em Settings, vale ligar **Auto deploy** (senão cada envio ao GitHub precisa de um
+deploy manual) e apontar **Healthcheck Path** para `/api/auth/status` — essa rota
+consulta o banco, então ela só passa se o app subiu *e* alcançou o Supabase, e um deploy
+quebrado não derruba a versão que está no ar.
 
-Nas variáveis de ambiente da aplicação, preencha `DATABASE_URL`, `APP_SECRET`,
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e, se quiser a geração automática,
-`ANTHROPIC_API_KEY`. Gere o `APP_SECRET` com:
+### 3. Domínio próprio
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-As tabelas são criadas sozinhas no primeiro acesso, e a primeira pessoa a abrir o app
-cria a conta de administrador. Se o app subir sem `APP_SECRET`, ele recusa todo acesso
-com uma mensagem em vez de ficar aberto na internet.
-
-### Trocar de hospedagem depois
-
-A dependência de fornecedor está em dois arquivos: `lib/db.ts` (qualquer Postgres serve)
-e `app/api/upload/route.ts` (Supabase Storage). Todo o resto é Next.js comum, então mudar
-para uma VPS ou outro provedor é trocar esses dois e o comando de start.
+Em **Settings → Networking → Custom Domain** no Railway, e um registro **CNAME** no DNS
+do seu domínio apontando para o endereço que ele mostrar.
 
 ### Levar os dados locais para a nuvem
 
