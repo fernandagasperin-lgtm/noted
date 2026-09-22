@@ -279,7 +279,7 @@ async function main() {
   section('tabelas');
   const tablePage = await createPage(alice.id, projA.id, 'Compras', 'database');
   const inicial = await readTable(tablePage!.id);
-  check('tabela nova ja vem com colunas utilizaveis', inicial.columns.length === 2,
+  check('tabela nova nasce limpa, como no Notion', inicial.columns.length === 0,
     `${inicial.columns.length} colunas`);
   check('e sem linhas', inicial.rows.length === 0);
 
@@ -294,7 +294,7 @@ async function main() {
   });
 
   const depoisDeColunas = await readTable(tablePage!.id);
-  check('colunas novas entram na ordem', depoisDeColunas.columns.length === 4);
+  check('colunas novas entram na ordem', depoisDeColunas.columns.length === 2);
   check('formato de moeda e guardado',
     depoisDeColunas.columns.find((c) => c.id === colValor.id)?.format === 'brl');
   check('opcoes de selecao sao guardadas',
@@ -322,7 +322,7 @@ async function main() {
 
   await deleteColumn(colValor.id);
   const semColuna = await readTable(tablePage!.id);
-  check('excluir coluna some com ela', semColuna.columns.length === 3);
+  check('excluir coluna some com ela', semColuna.columns.length === 1);
   check('e limpa o valor orfao das linhas',
     !(colValor.id in semColuna.rows[0].values),
     JSON.stringify(semColuna.rows[0].values));

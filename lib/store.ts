@@ -315,21 +315,14 @@ function toRow(r: Row): DbRow {
   };
 }
 
-/** Uma tabela recem-criada ja vem utilizavel, em vez de uma grade vazia. */
+/** Nasce vazia, com a coluna de titulo e nada mais, como no Notion: quem cria
+ *  decide as colunas em vez de apagar as que vieram sem ter pedido. */
 export async function readTable(
   pageId: string,
 ): Promise<{ columns: DbColumn[]; rows: DbRow[] }> {
   await ensureSchema();
-  let columns = await sql`
+  const columns = await sql`
     SELECT * FROM db_columns WHERE page_id = ${pageId} ORDER BY position, created_at`;
-
-  if (columns.length === 0) {
-    await createColumn(pageId, 'Status', 'select');
-    await createColumn(pageId, 'Data', 'date');
-    columns = await sql`
-      SELECT * FROM db_columns WHERE page_id = ${pageId} ORDER BY position, created_at`;
-  }
-
   const rows = await sql`
     SELECT * FROM db_rows WHERE page_id = ${pageId} ORDER BY position, created_at`;
   return { columns: columns.map(toColumn), rows: rows.map(toRow) };

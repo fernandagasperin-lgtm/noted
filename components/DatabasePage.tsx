@@ -231,15 +231,20 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
               </th>
             ))}
 
-            <th className="relative w-12 border-b border-[#E9E9E7] px-2 py-1.5 text-left">
+            <th
+              className={
+                'relative border-b border-[#E9E9E7] px-2 py-1.5 text-left ' +
+                (columns.length === 0 ? 'w-auto' : 'w-12')
+              }
+            >
               {canEdit && (
                 <>
                   <button
                     onClick={() => setAddingColumn(!addingColumn)}
                     title="Nova coluna"
-                    className="text-[15px] text-[#9B9A97] hover:text-[#37352F]"
+                    className="whitespace-nowrap text-[13px] font-normal text-[#9B9A97] hover:text-[#37352F]"
                   >
-                    +
+                    {columns.length === 0 ? '+  Adicionar propriedade' : '+'}
                   </button>
                   {addingColumn && (
                     <>
