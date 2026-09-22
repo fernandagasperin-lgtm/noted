@@ -108,7 +108,7 @@ export async function readWorkspace(me: Me): Promise<Workspace> {
   const possuiAlgum = projects.some((p) => p.owner_id === me.id);
 
   if (!possuiAlgum) {
-    // createProject ja cria o quadro inicial; criar outro aqui duplicava a pagina.
+    // createProject ja cria o mural inicial; criar outro aqui duplicava a pagina.
     const project = await createProject(me.id, 'Meu primeiro projeto');
     const created = await sql`
       SELECT * FROM pages WHERE project_id = ${project.id} ORDER BY created_at`;
@@ -140,7 +140,7 @@ export async function createProject(ownerId: string, name: string): Promise<Proj
     VALUES (${randomUUID()}, ${name}, '📁', ${color}, ${ownerId})
     RETURNING *`;
   const project = toProject(row, ownerId);
-  await createPage(ownerId, project.id, 'Quadro inicial', 'canvas');
+  await createPage(ownerId, project.id, 'Mural inicial', 'canvas');
   return project;
 }
 
@@ -222,7 +222,7 @@ export async function deletePage(id: string, ownerId: string): Promise<boolean> 
   const [{ count }] = await sql`
     SELECT count(*)::int AS count FROM pages WHERE project_id = ${page.project_id}`;
   if ((count as number) === 0) {
-    await createPage(ownerId, page.project_id as string, 'Quadro inicial', 'canvas');
+    await createPage(ownerId, page.project_id as string, 'Mural inicial', 'canvas');
   }
   return true;
 }

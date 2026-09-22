@@ -93,7 +93,7 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
       <th className={th}>Titulo</th>
       {!grouped && <th className={th}>Assistente</th>}
       <th className={th}>Deriva de</th>
-      <th className={th}>Quadro</th>
+      <th className={th}>Mural</th>
       <th className={th}>Criado</th>
       <th className={th}>Resultado</th>
     </tr>
@@ -156,7 +156,7 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
         {tab === 'derivations' ? (
           derivations.length === 0 ? (
             <p className="p-8 text-[13px] leading-relaxed text-slate-400">
-              Nenhum resultado ainda. Crie um assistente, coloque o card dele num quadro e
+              Nenhum resultado ainda. Crie um assistente, coloque o card dele num mural e
               use — cada uso vira uma linha aqui.
             </p>
           ) : grouped && groups ? (
@@ -189,7 +189,7 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
           )
         ) : inventory.length === 0 ? (
           <p className="p-8 text-[13px] text-slate-400">
-            Os quadros deste projeto ainda estao vazios.
+            Os murais deste projeto ainda estao vazios.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -198,7 +198,7 @@ export default function TablePage({ pages, assistants, projectId, onOpen }: Prop
               <tr className="border-b border-slate-200">
                 <th className={th}>Tipo</th>
                 <th className={th}>Conteudo</th>
-                <th className={th}>Quadro</th>
+                <th className={th}>Mural</th>
                 <th className={th}>Posicao</th>
               </tr>
             </thead>

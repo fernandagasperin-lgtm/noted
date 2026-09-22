@@ -9,7 +9,7 @@ const MUTED = '#9B9A97';
 const HOVER = '#F1F1EF';
 
 const TIPOS: { tipo: PageType; rotulo: string }[] = [
-  { tipo: 'canvas', rotulo: 'Quadro' },
+  { tipo: 'canvas', rotulo: 'Mural' },
   { tipo: 'database', rotulo: 'Tabela' },
   { tipo: 'text', rotulo: 'Pagina de texto' },
   { tipo: 'assistants', rotulo: 'Assistentes' },
@@ -117,6 +117,35 @@ export default function Sidebar({
     />
   );
 
+  const MenuDeTipos = ({
+    projectId,
+    aoEscolher,
+  }: {
+    projectId: string;
+    aoEscolher: () => void;
+  }) => (
+    <>
+      <div className="px-3 py-1 text-[11px] uppercase tracking-wide" style={{ color: MUTED }}>
+        Adicionar
+      </div>
+      {TIPOS.map(({ tipo, rotulo }) => (
+        <button
+          key={tipo}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCreatePage(projectId, tipo);
+            aoEscolher();
+          }}
+          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] hover:bg-[#F1F1EF]"
+          style={{ color: INK }}
+        >
+          <Icon name={tipo} size={15} color={PAGE_COLOR[tipo]} />
+          {rotulo}
+        </button>
+      ))}
+    </>
+  );
+
   const Cabecalho = ({ texto }: { texto: string }) => (
     <div
       className="px-2 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide"
@@ -133,7 +162,7 @@ export default function Sidebar({
         onClose();
       }}
       onDoubleClick={() => page.role === 'owner' && comecarRename('page', page.id, page.title)}
-      className={'group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-[14px] ' + (aninhada ? 'ml-3' : '')}
+      className={'group flex cursor-pointer items-center gap-1.5 rounded py-1 pr-2 text-[14px] ' + (aninhada ? 'pl-2' : 'px-2')}
       style={{
         background: page.id === activeId ? HOVER : undefined,
         color: page.id === activeId ? INK : '#5F5E5B',
@@ -249,27 +278,7 @@ export default function Sidebar({
                     }}
                   />
                   <div className="absolute right-0 top-6 z-30 w-56 overflow-hidden rounded-xl border border-[#E9E9E7] bg-white py-1 shadow-xl">
-                    <div
-                      className="px-3 py-1 text-[11px] uppercase tracking-wide"
-                      style={{ color: MUTED }}
-                    >
-                      Adicionar
-                    </div>
-                    {TIPOS.map(({ tipo, rotulo }) => (
-                      <button
-                        key={tipo}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCreatePage(project.id, tipo);
-                          setMenuDe(null);
-                        }}
-                        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] hover:bg-[#F1F1EF]"
-                        style={{ color: INK }}
-                      >
-                        <Icon name={tipo} size={15} color={PAGE_COLOR[tipo]} />
-                        {rotulo}
-                      </button>
-                    ))}
+                    <MenuDeTipos projectId={project.id} aoEscolher={() => setMenuDe(null)} />
 
                     <div className="my-1 h-px bg-[#E9E9E7]" />
                     <button
@@ -307,20 +316,32 @@ export default function Sidebar({
         </div>
 
         {!fechado && (
-          <>
+          <div className="ml-[13px] border-l border-[#E3E2E0] pl-1">
             {paginas.map((p) => (
               <LinhaPagina key={p.id} page={p} aninhada />
             ))}
             {project.mine && !termo && (
-              <button
-                onClick={() => onCreatePage(project.id, 'canvas')}
-                className="ml-3 w-full rounded px-2 py-1 text-left text-[13.5px] hover:bg-[#F7F7F5]"
-                style={{ color: MUTED }}
-              >
-                + Nova pagina
-              </button>
+              <div className="relative ml-3">
+                <button
+                  onClick={() => setMenuDe(menuDe === 'nova-' + project.id ? null : 'nova-' + project.id)}
+                  className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[13.5px] hover:bg-[#F7F7F5]"
+                  style={{ color: MUTED }}
+                >
+                  <Icon name="plus" size={13} />
+                  Nova pagina
+                </button>
+
+                {menuDe === 'nova-' + project.id && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setMenuDe(null)} />
+                    <div className="absolute left-0 top-7 z-30 w-56 overflow-hidden rounded-xl border border-[#E9E9E7] bg-white py-1 shadow-xl">
+                      <MenuDeTipos projectId={project.id} aoEscolher={() => setMenuDe(null)} />
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-          </>
+          </div>
         )}
       </div>
     );

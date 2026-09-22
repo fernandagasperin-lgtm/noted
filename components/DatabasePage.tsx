@@ -694,17 +694,39 @@ function OptionPicker({
     }
   };
 
+  // O painel vive dentro da celula, e a celula reabre a edicao ao ser clicada.
+  // Sem conter o clique aqui, fechar reabria na hora e o campo parecia travado.
+  const conter = (e: React.MouseEvent) => e.stopPropagation();
+  const fechar = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDone();
+  };
+
   return (
     <>
-      <div className="fixed inset-0 z-20" onClick={onDone} />
+      <div className="fixed inset-0 z-20" onClick={fechar} />
       <div
-        onClick={(e) => e.stopPropagation()}
+        onClick={conter}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            onDone();
+          }
+        }}
         className="absolute z-30 -ml-2 mt-1 w-56 rounded-lg border border-[#E9E9E7] bg-white p-1 shadow-lg"
       >
         <input
           autoFocus
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
+          onKeyDown={async (e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') onDone();
+            if (e.key !== 'Enter' || !busca.trim()) return;
+            const nova = await ensureOption(column, busca);
+            setBusca('');
+            alternar(nova.id);
+          }}
           placeholder="Buscar ou criar..."
           className="mb-1 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] outline-none focus:border-[#2383E2]"
         />
@@ -712,7 +734,10 @@ function OptionPicker({
           {encontradas.map((o) => (
             <button
               key={o.id}
-              onClick={() => alternar(o.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                alternar(o.id);
+              }}
               className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-[#F7F7F5]"
             >
               <span className="w-3 text-[11px] text-[#9B9A97]">
@@ -723,7 +748,8 @@ function OptionPicker({
           ))}
           {podeCriar && (
             <button
-              onClick={async () => {
+              onClick={async (e) => {
+                e.stopPropagation();
                 const nova = await ensureOption(column, busca);
                 setBusca('');
                 alternar(nova.id);
@@ -736,7 +762,7 @@ function OptionPicker({
         </div>
         {multi && (
           <button
-            onClick={onDone}
+            onClick={fechar}
             className="mt-1 w-full rounded px-1.5 py-1 text-left text-[12px] text-[#9B9A97] hover:bg-[#F7F7F5]"
           >
             Fechar

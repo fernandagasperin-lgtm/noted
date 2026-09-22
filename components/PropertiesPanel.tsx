@@ -244,7 +244,7 @@ export default function PropertiesPanel({
                 <optgroup key={project.id} label={project.name}>
                   {options.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.icon} {p.title}
+                      {p.title}
                     </option>
                   ))}
                 </optgroup>

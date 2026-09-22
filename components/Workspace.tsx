@@ -27,7 +27,7 @@ const Canvas = dynamic(() => import('./Canvas'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center text-sm text-slate-400">
-      Carregando quadro...
+      Carregando mural...
     </div>
   ),
 });
@@ -382,7 +382,7 @@ export default function Workspace() {
 
   const createPage = async (projectId: string, type: PageType) => {
     const titles: Record<PageType, string> = {
-      canvas: 'Novo quadro',
+      canvas: 'Novo mural',
       text: 'Nova pagina',
       table: 'Relatorio de variacoes',
       assistants: 'Assistentes',

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { ShareEntry } from '@/lib/access';
 import type { Page } from '@/lib/types';
+import Icon, { PAGE_COLOR } from './Icon';
 
 interface Person {
   id: string;
@@ -62,8 +63,9 @@ export default function ShareDialog({ page, meId, onClose }: Props) {
         <header className="flex items-center gap-2 border-b border-slate-200/70 px-5 py-3.5">
           <div className="min-w-0 flex-1">
             <div className="text-[15px] font-semibold text-slate-900">Compartilhar</div>
-            <div className="truncate text-[12.5px] text-slate-400">
-              {page.icon} {page.title}
+            <div className="flex items-center gap-1.5 truncate text-[12.5px] text-slate-400">
+              <Icon name={page.type} size={13} color={PAGE_COLOR[page.type]} />
+              {page.title}
             </div>
           </div>
           <button

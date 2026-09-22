@@ -204,10 +204,9 @@ export default function Shape({
           {project && (
             <Rect x={0} y={14} width={3} height={el.height - 28} fill={project.color} cornerRadius={2} />
           )}
-          <Text text={target?.icon ?? '🔗'} x={16} y={15} fontSize={20} />
           <Text
             text={target?.title ?? 'Pagina indisponivel'}
-            x={46}
+            x={18}
             y={16}
             width={el.width - 62}
             fontSize={15}
@@ -221,7 +220,7 @@ export default function Shape({
             text={
               target
                 ? (project ? project.name + ' · ' : '') +
-                  (target.type === 'text' ? 'Pagina de texto' : 'Quadro')
+                  (target.type === 'text' ? 'Pagina de texto' : 'Mural')
                 : ''
             }
             x={46}
@@ -235,7 +234,7 @@ export default function Shape({
           />
           <Text
             text="duplo clique para abrir"
-            x={46}
+            x={18}
             y={el.height - 22}
             fontSize={11}
             fontFamily="Inter, system-ui, sans-serif"

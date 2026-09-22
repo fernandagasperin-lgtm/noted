@@ -95,7 +95,7 @@ export default function AssistantsPage({
           <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
             <p className="max-w-sm text-[13px] leading-relaxed text-slate-400">
               Um assistente guarda um prompt reutilizavel. Toda vez que voce usa ele num
-              quadro, nasce um card de resultado com titulo padronizado — e a tabela mostra
+              mural, nasce um card de resultado com titulo padronizado — e a tabela mostra
               todas as variacoes que sairam dali.
             </p>
             <button
