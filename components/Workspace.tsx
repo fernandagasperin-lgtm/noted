@@ -761,6 +761,7 @@ export default function Workspace() {
             titleWidth={activePage.titleWidth}
             sorts={activePage.sorts}
             filters={activePage.filters}
+            groupBy={activePage.groupBy}
             onView={(patch) => {
               setPages((prev) =>
                 prev.map((p) => (p.id === activePage.id ? { ...p, ...patch } : p)),

@@ -59,6 +59,7 @@ function toPage(r: Row): Page {
     titleWidth: Number(r.title_width ?? 320),
     sorts: (r.table_sorts ?? []) as Page['sorts'],
     filters: (r.table_filters ?? []) as Page['filters'],
+    groupBy: (r.group_by as string) ?? null,
     title: r.title as string,
     type: r.type as Page['type'],
     icon: r.icon as string,
@@ -208,6 +209,8 @@ export async function updatePage(
            title_width = COALESCE(${patch.titleWidth ?? null}, title_width),
            table_sorts = COALESCE(${patch.sorts ? JSON.stringify(patch.sorts) : null}::jsonb, table_sorts),
            table_filters = COALESCE(${patch.filters ? JSON.stringify(patch.filters) : null}::jsonb, table_filters),
+           group_by = CASE WHEN ${'groupBy' in patch}::boolean
+                           THEN ${patch.groupBy ?? null}::text ELSE group_by END,
            elements = COALESCE(${patch.elements ? JSON.stringify(patch.elements) : null}::jsonb, elements),
            updated_at = now()
      WHERE id = ${id}
@@ -317,6 +320,8 @@ function toColumn(r: Row): DbColumn {
     type: r.type as DbColumn['type'],
     options: (r.options ?? []) as DbColumn['options'],
     format: (r.format ?? 'plain') as DbColumn['format'],
+    decimals: r.decimals === null || r.decimals === undefined ? null : Number(r.decimals),
+    display: (r.display ?? 'number') as DbColumn['display'],
     width: Number(r.width ?? 180),
     position: Number(r.position),
   };
@@ -374,6 +379,9 @@ export async function updateColumn(
            type = COALESCE(${patch.type ?? null}, type),
            format = COALESCE(${patch.format ?? null}, format),
            width = COALESCE(${patch.width ?? null}, width),
+           decimals = CASE WHEN ${'decimals' in patch}::boolean
+                            THEN ${patch.decimals ?? null}::int ELSE decimals END,
+           display = COALESCE(${patch.display ?? null}, display),
            options = COALESCE(${patch.options ? JSON.stringify(patch.options) : null}::jsonb, options),
            position = COALESCE(${patch.position ?? null}, position)
      WHERE id = ${id}

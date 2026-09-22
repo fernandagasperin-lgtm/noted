@@ -1,13 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import {
   COLUMN_LABELS,
+  FORMAT_LABELS,
   OPTION_COLORS,
   formatNumber,
   type ColumnType,
   type DbColumn,
   type DbRow,
+  type NumberDisplay,
   type NumberFormat,
   type SelectOption,
 } from '@/lib/types';
@@ -31,7 +33,12 @@ interface Props {
   onTitleWidth: (width: number) => void;
   sorts: TableSort[];
   filters: TableFilter[];
-  onView: (patch: { sorts?: TableSort[]; filters?: TableFilter[] }) => void;
+  groupBy: string | null;
+  onView: (patch: {
+    sorts?: TableSort[];
+    filters?: TableFilter[];
+    groupBy?: string | null;
+  }) => void;
 }
 
 export default function DatabasePage({
@@ -41,9 +48,13 @@ export default function DatabasePage({
   onTitleWidth,
   sorts,
   filters,
+  groupBy,
   onView,
 }: Props) {
-  const [painel, setPainel] = useState<'sort' | 'filter' | null>(null);
+  const [painel, setPainel] = useState<'sort' | 'filter' | 'group' | null>(null);
+  const [gruposFechados, setGruposFechados] = useState<Record<string, boolean>>({});
+  const [arrastandoColuna, setArrastandoColuna] = useState<string | null>(null);
+  const [alvoSolta, setAlvoSolta] = useState<string | null>(null);
   const [columns, setColumns] = useState<DbColumn[]>([]);
   const [rows, setRows] = useState<DbRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,6 +205,30 @@ export default function DatabasePage({
       />
     ) : null;
 
+  /** Reordena gravando a nova posicao de cada coluna afetada. */
+  const moverColuna = async (origemId: string, destinoId: string) => {
+    if (origemId === destinoId) return;
+    const ordem = columns.map((c) => c.id);
+    const de = ordem.indexOf(origemId);
+    const para = ordem.indexOf(destinoId);
+    if (de === -1 || para === -1) return;
+    ordem.splice(para, 0, ...ordem.splice(de, 1));
+
+    const reordenadas = ordem.map(
+      (id, i) => ({ ...columns.find((c) => c.id === id)!, position: i }),
+    );
+    setColumns(reordenadas);
+    await Promise.all(
+      reordenadas.map((c) =>
+        fetch(`/api/pages/${pageId}/table/columns/${c.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position: c.position }),
+        }),
+      ),
+    );
+  };
+
   /** Uma opcao nova nasce ao ser digitada, como no Notion. */
   const ensureOption = async (column: DbColumn, name: string): Promise<SelectOption> => {
     const existing = column.options.find(
@@ -218,6 +253,42 @@ export default function DatabasePage({
 
   const visiveis = applySorts(applyFilters(rows, columns, filters), columns, sorts);
 
+  /** A barra e proporcional ao maior valor da coluna, como no Notion. */
+  const maximos: Record<string, number> = {};
+  for (const c of columns) {
+    if (c.type !== 'number') continue;
+    maximos[c.id] = visiveis.reduce(
+      (m, r) => Math.max(m, Number(r.values[c.id]) || 0),
+      0,
+    );
+  }
+
+  /** Agrupa preservando a ordem ja aplicada dentro de cada grupo. */
+  const colunaGrupo = columns.find((c) => c.id === groupBy) ?? null;
+  const rotuloGrupo = (row: DbRow): string => {
+    if (!colunaGrupo) return '';
+    const v = row.values[colunaGrupo.id];
+    if (colunaGrupo.type === 'check') return v ? 'Marcado' : 'Nao marcado';
+    const ids = Array.isArray(v) ? (v as string[]) : v ? [String(v)] : [];
+    if (colunaGrupo.type === 'select' || colunaGrupo.type === 'multi') {
+      const nomes = ids
+        .map((id) => colunaGrupo.options.find((o) => o.id === id)?.name)
+        .filter(Boolean);
+      return nomes.length ? nomes.join(', ') : 'Sem valor';
+    }
+    return v === null || v === undefined || v === '' ? 'Sem valor' : String(v);
+  };
+
+  const grupos: { rotulo: string; linhas: DbRow[] }[] = [];
+  if (colunaGrupo) {
+    for (const row of visiveis) {
+      const rotulo = rotuloGrupo(row);
+      const achado = grupos.find((g) => g.rotulo === rotulo);
+      if (achado) achado.linhas.push(row);
+      else grupos.push({ rotulo, linhas: [row] });
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center text-[13px] text-[#9B9A97]">
@@ -228,6 +299,69 @@ export default function DatabasePage({
 
   const cellBase =
     'border-b border-r border-[#E9E9E7] px-2 py-1.5 text-[14px] text-[#37352F] align-top';
+
+  const renderLinha = (row: DbRow) => (
+            <tr key={row.id} className="group">
+        <td
+          style={{ width: larguraTitulo, minWidth: larguraTitulo }}
+          className={'sticky left-0 z-10 bg-white ' + cellBase}
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0">
+              <Icon name="text" size={13} color="#C7C6C4" />
+            </span>
+            <input
+              value={row.title}
+              readOnly={!canEdit}
+              onChange={(e) => saveRowSoon(row.id, { title: e.target.value })}
+              placeholder="Sem titulo"
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[#C7C6C4]"
+            />
+            <button
+              onClick={() => setOpenRow(row)}
+              className="flex shrink-0 items-center gap-1 rounded border border-[#E9E9E7] px-1.5 py-0.5 text-[11px] text-[#787774] opacity-0 transition hover:bg-[#F7F7F5] group-hover:opacity-100"
+            >
+              <Icon name="open" size={11} />
+              ABRIR
+            </button>
+            {canEdit && (
+              <button
+                onClick={() => removeRow(row.id)}
+                title="Excluir linha"
+                className="shrink-0 px-1 text-[#C7C6C4] opacity-0 transition hover:text-[#EB5757] group-hover:opacity-100"
+              >
+                <Icon name="close" size={13} />
+              </button>
+            )}
+          </div>
+        </td>
+
+        {columns.map((c) => (
+          <td
+            key={c.id}
+            style={{ width: c.width, minWidth: c.width }}
+            onClick={() => canEdit && setEditing({ rowId: row.id, columnId: c.id })}
+            className={
+              cellBase +
+              ' cursor-text hover:bg-[#F7F7F5] ' +
+              (c.type === 'number' ? ' text-right' : '')
+            }
+          >
+            <Cell
+              column={c}
+              row={row}
+              maxDaColuna={maximos[c.id] ?? 0}
+              editing={editing?.rowId === row.id && editing?.columnId === c.id}
+              canEdit={canEdit}
+              onDone={() => setEditing(null)}
+              onChange={(v) => setCell(row, c.id, v)}
+              ensureOption={ensureOption}
+            />
+          </td>
+        ))}
+        <td className="border-b border-[#E9E9E7]" />
+      </tr>
+  );
 
   const botaoBarra = (ativo: boolean) =>
     'flex items-center gap-1.5 rounded px-2 py-1 text-[13px] transition ' +
@@ -265,6 +399,12 @@ export default function DatabasePage({
             Ordenar
             {sorts.length > 0 && <span>{sorts.length}</span>}
           </button>
+          <button
+            onClick={() => setPainel(painel === 'group' ? null : 'group')}
+            className={botaoBarra(Boolean(groupBy))}
+          >
+            Agrupar
+          </button>
 
           <span className="ml-auto text-[12px] text-[#9B9A97]">
             {visiveis.length === rows.length
@@ -276,7 +416,41 @@ export default function DatabasePage({
             <>
               <div className="fixed inset-0 z-20" onClick={() => setPainel(null)} />
               <div className="absolute left-3 top-9 z-30 w-[23rem] rounded-lg border border-[#E9E9E7] bg-white p-2 shadow-xl">
-                {painel === 'sort' ? (
+                {painel === 'group' ? (
+                  <>
+                    <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                      Agrupar por
+                    </div>
+                    <button
+                      onClick={() => onView({ groupBy: null })}
+                      className={
+                        'flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[13px] hover:bg-[#F1F1EF] ' +
+                        (groupBy ? 'text-[#37352F]' : 'text-[#2383E2]')
+                      }
+                    >
+                      Sem agrupamento
+                    </button>
+                    {columns
+                      .filter((c) => c.type !== 'url' && c.type !== 'text')
+                      .map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => onView({ groupBy: c.id })}
+                          className={
+                            'flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[13px] hover:bg-[#F1F1EF] ' +
+                            (groupBy === c.id ? 'text-[#2383E2]' : 'text-[#37352F]')
+                          }
+                        >
+                          <Icon name={c.type} size={14} color={TYPE_COLOR[c.type]} />
+                          {c.name}
+                        </button>
+                      ))}
+                    <p className="px-1.5 pt-2 text-[11.5px] leading-relaxed text-[#9B9A97]">
+                      Colunas de texto livre ficam de fora: agrupar por elas daria um grupo
+                      por linha.
+                    </p>
+                  </>
+                ) : painel === 'sort' ? (
                   <>
                     {sorts.length === 0 && (
                       <p className="px-1 py-2 text-[13px] text-[#9B9A97]">Nenhuma ordenacao.</p>
@@ -438,7 +612,28 @@ export default function DatabasePage({
               <th
                 key={c.id}
                 style={{ width: c.width, minWidth: c.width }}
-                className="relative border-b border-r border-[#E9E9E7] px-2 py-1.5 text-left text-[13px] font-normal text-[#9B9A97]"
+                draggable={canEdit}
+                onDragStart={() => setArrastandoColuna(c.id)}
+                onDragOver={(e) => {
+                  if (!arrastandoColuna || arrastandoColuna === c.id) return;
+                  e.preventDefault();
+                  setAlvoSolta(c.id);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (arrastandoColuna) moverColuna(arrastandoColuna, c.id);
+                  setArrastandoColuna(null);
+                  setAlvoSolta(null);
+                }}
+                onDragEnd={() => {
+                  setArrastandoColuna(null);
+                  setAlvoSolta(null);
+                }}
+                className={
+                  'relative border-b border-r border-[#E9E9E7] px-2 py-1.5 text-left text-[13px] font-normal text-[#9B9A97] ' +
+                  (arrastandoColuna === c.id ? 'opacity-40 ' : '') +
+                  (alvoSolta === c.id ? 'bg-[#E7F3F8] ' : '')
+                }
               >
                 <button
                   onClick={() => canEdit && setMenuColumn(menuColumn === c.id ? null : c.id)}
@@ -501,11 +696,52 @@ export default function DatabasePage({
                             }
                             className="mb-2 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] text-[#37352F] outline-none"
                           >
-                            <option value="plain">Numero</option>
-                            <option value="brl">Real (R$)</option>
-                            <option value="usd">Dolar ($)</option>
-                            <option value="percent">Porcentagem</option>
+                            {(Object.keys(FORMAT_LABELS) as NumberFormat[]).map((f) => (
+                              <option key={f} value={f}>
+                                {FORMAT_LABELS[f]}
+                              </option>
+                            ))}
                           </select>
+
+                          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                            Casas decimais
+                          </div>
+                          <select
+                            value={c.decimals === null ? 'auto' : String(c.decimals)}
+                            onChange={(e) =>
+                              saveColumn(c.id, {
+                                decimals: e.target.value === 'auto' ? null : Number(e.target.value),
+                              })
+                            }
+                            className="mb-2 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] text-[#37352F] outline-none"
+                          >
+                            <option value="auto">Automatico</option>
+                            {[0, 1, 2, 3, 4].map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+
+                          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                            Mostrar como
+                          </div>
+                          <div className="mb-2 flex gap-1">
+                            {(['number', 'bar'] as NumberDisplay[]).map((d) => (
+                              <button
+                                key={d}
+                                onClick={() => saveColumn(c.id, { display: d })}
+                                className={
+                                  'flex-1 rounded border px-2 py-1 text-[12.5px] ' +
+                                  (c.display === d
+                                    ? 'border-[#2383E2] text-[#2383E2]'
+                                    : 'border-[#E9E9E7] text-[#787774] hover:bg-[#F1F1EF]')
+                                }
+                              >
+                                {d === 'number' ? 'Numero' : 'Barra'}
+                              </button>
+                            ))}
+                          </div>
                         </>
                       )}
 
@@ -636,67 +872,35 @@ export default function DatabasePage({
         </thead>
 
         <tbody>
-          {visiveis.map((row) => (
-            <tr key={row.id} className="group">
-              <td
-                style={{ width: larguraTitulo, minWidth: larguraTitulo }}
-                className={'sticky left-0 z-10 bg-white ' + cellBase}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="shrink-0">
-                    <Icon name="text" size={13} color="#C7C6C4" />
-                  </span>
-                  <input
-                    value={row.title}
-                    readOnly={!canEdit}
-                    onChange={(e) => saveRowSoon(row.id, { title: e.target.value })}
-                    placeholder="Sem titulo"
-                    className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[#C7C6C4]"
-                  />
-                  <button
-                    onClick={() => setOpenRow(row)}
-                    className="flex shrink-0 items-center gap-1 rounded border border-[#E9E9E7] px-1.5 py-0.5 text-[11px] text-[#787774] opacity-0 transition hover:bg-[#F7F7F5] group-hover:opacity-100"
-                  >
-                    <Icon name="open" size={11} />
-                    ABRIR
-                  </button>
-                  {canEdit && (
-                    <button
-                      onClick={() => removeRow(row.id)}
-                      title="Excluir linha"
-                      className="shrink-0 px-1 text-[#C7C6C4] opacity-0 transition hover:text-[#EB5757] group-hover:opacity-100"
+          {colunaGrupo
+            ? grupos.map((g) => (
+                <Fragment key={g.rotulo}>
+                  <tr>
+                    <td
+                      colSpan={columns.length + 2}
+                      onClick={() =>
+                        setGruposFechados((f) => ({ ...f, [g.rotulo]: !f[g.rotulo] }))
+                      }
+                      className="cursor-pointer border-b border-[#E9E9E7] bg-[#FBFBFA] px-2 py-1.5"
                     >
-                      <Icon name="close" size={13} />
-                    </button>
-                  )}
-                </div>
-              </td>
-
-              {columns.map((c) => (
-                <td
-                  key={c.id}
-                  style={{ width: c.width, minWidth: c.width }}
-                  onClick={() => canEdit && setEditing({ rowId: row.id, columnId: c.id })}
-                  className={
-                    cellBase +
-                    ' cursor-text hover:bg-[#F7F7F5] ' +
-                    (c.type === 'number' ? ' text-right' : '')
-                  }
-                >
-                  <Cell
-                    column={c}
-                    row={row}
-                    editing={editing?.rowId === row.id && editing?.columnId === c.id}
-                    canEdit={canEdit}
-                    onDone={() => setEditing(null)}
-                    onChange={(v) => setCell(row, c.id, v)}
-                    ensureOption={ensureOption}
-                  />
-                </td>
-              ))}
-              <td className="border-b border-[#E9E9E7]" />
-            </tr>
-          ))}
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium text-[#37352F]">
+                        <span
+                          className={
+                            'transition-transform ' +
+                            (gruposFechados[g.rotulo] ? '' : 'rotate-90')
+                          }
+                        >
+                          <Icon name="chevron" size={11} color="#9B9A97" />
+                        </span>
+                        {g.rotulo}
+                        <span className="font-normal text-[#9B9A97]">{g.linhas.length}</span>
+                      </span>
+                    </td>
+                  </tr>
+                  {!gruposFechados[g.rotulo] && g.linhas.map(renderLinha)}
+                </Fragment>
+              ))
+            : visiveis.map(renderLinha)}
 
           {canEdit && (
             <tr>
@@ -755,6 +959,7 @@ export default function DatabasePage({
 interface CellProps {
   column: DbColumn;
   row: DbRow;
+  maxDaColuna: number;
   editing: boolean;
   canEdit: boolean;
   onDone: () => void;
@@ -773,7 +978,16 @@ export function Pill({ option }: { option: SelectOption }) {
   );
 }
 
-function Cell({ column, row, editing, canEdit, onDone, onChange, ensureOption }: CellProps) {
+function Cell({
+  column,
+  row,
+  maxDaColuna,
+  editing,
+  canEdit,
+  onDone,
+  onChange,
+  ensureOption,
+}: CellProps) {
   const value = row.values[column.id];
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -829,7 +1043,22 @@ function Cell({ column, row, editing, canEdit, onDone, onChange, ensureOption }:
 
   if (!editing) {
     if (column.type === 'number') {
-      return <span>{formatNumber(value, column.format)}</span>;
+      const texto = formatNumber(value, column.format, column.decimals);
+      if (column.display === 'bar' && value !== null && value !== undefined && value !== '') {
+        const proporcao = maxDaColuna > 0 ? Math.min(1, Number(value) / maxDaColuna) : 0;
+        return (
+          <div className="flex items-center justify-end gap-1.5">
+            <span className="text-[12px] text-[#787774]">{texto}</span>
+            <span className="h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-[#E9E9E7]">
+              <span
+                className="block h-full rounded-full bg-[#2383E2]"
+                style={{ width: Math.max(2, proporcao * 100) + '%' }}
+              />
+            </span>
+          </div>
+        );
+      }
+      return <span>{texto}</span>;
     }
     if (column.type === 'url' && value) {
       return (

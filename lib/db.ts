@@ -167,10 +167,13 @@ export function ensureSchema(): Promise<void> {
       )`;
 
     await sql`ALTER TABLE db_columns ADD COLUMN IF NOT EXISTS width INT NOT NULL DEFAULT 180`;
+    await sql`ALTER TABLE db_columns ADD COLUMN IF NOT EXISTS decimals INT`;
+    await sql`ALTER TABLE db_columns ADD COLUMN IF NOT EXISTS display TEXT NOT NULL DEFAULT 'number'`;
     // a coluna de titulo nao vive em db_columns, entao a largura dela fica na pagina
     await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS title_width INT NOT NULL DEFAULT 320`;
     await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS table_sorts JSONB NOT NULL DEFAULT '[]'::jsonb`;
     await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS table_filters JSONB NOT NULL DEFAULT '[]'::jsonb`;
+    await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS group_by TEXT`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS page_favorites (

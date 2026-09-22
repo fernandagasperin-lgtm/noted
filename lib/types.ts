@@ -64,7 +64,18 @@ export type ColumnType =
   | 'url';
 
 /** Como o numero e apresentado; nao muda o que fica guardado. */
-export type NumberFormat = 'plain' | 'brl' | 'usd' | 'percent';
+export type NumberFormat = 'plain' | 'brl' | 'usd' | 'eur' | 'percent';
+
+/** Numero cru ou barra proporcional ao maior valor da coluna. */
+export type NumberDisplay = 'number' | 'bar';
+
+export const FORMAT_LABELS: Record<NumberFormat, string> = {
+  plain: 'Numero',
+  brl: 'Real (R$)',
+  usd: 'Dolar (US$)',
+  eur: 'Euro (EUR)',
+  percent: 'Porcentagem',
+};
 
 export interface SelectOption {
   id: string;
@@ -80,6 +91,9 @@ export interface DbColumn {
   /** opcoes das colunas de selecao */
   options: SelectOption[];
   format: NumberFormat;
+  /** casas decimais; null deixa o proprio numero decidir */
+  decimals: number | null;
+  display: NumberDisplay;
   /** largura em pixels, ajustavel arrastando a borda */
   width: number;
   position: number;
@@ -121,18 +135,36 @@ export const COLUMN_LABELS: Record<ColumnType, string> = {
   url: 'Link',
 };
 
-export function formatNumber(value: unknown, format: NumberFormat): string {
+const MOEDAS: Partial<Record<NumberFormat, { locale: string; currency: string }>> = {
+  brl: { locale: 'pt-BR', currency: 'BRL' },
+  usd: { locale: 'en-US', currency: 'USD' },
+  eur: { locale: 'de-DE', currency: 'EUR' },
+};
+
+export function formatNumber(
+  value: unknown,
+  format: NumberFormat,
+  decimals: number | null = null,
+): string {
   if (value === null || value === undefined || value === '') return '';
   const n = Number(value);
   if (Number.isNaN(n)) return String(value);
-  if (format === 'percent') return n.toLocaleString('pt-BR') + '%';
-  if (format === 'brl') {
-    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const casas =
+    decimals === null || decimals === undefined
+      ? undefined
+      : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+
+  const moeda = MOEDAS[format];
+  if (moeda) {
+    return n.toLocaleString(moeda.locale, {
+      style: 'currency',
+      currency: moeda.currency,
+      ...casas,
+    });
   }
-  if (format === 'usd') {
-    return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-  }
-  return n.toLocaleString('pt-BR');
+  if (format === 'percent') return n.toLocaleString('pt-BR', casas) + '%';
+  return n.toLocaleString('pt-BR', casas);
 }
 
 export type PageRole = 'owner' | 'editor' | 'viewer';
@@ -182,6 +214,8 @@ export interface Page {
   /** tabelas: ordenacao e filtros da visualizacao */
   sorts: TableSort[];
   filters: TableFilter[];
+  /** tabelas: coluna pela qual as linhas sao agrupadas */
+  groupBy: string | null;
   title: string;
   type: PageType;
   icon: string;

@@ -409,6 +409,28 @@ async function main() {
   check('editar so o titulo preserva os valores', soTitulo.values[colValor.id] === 509);
   check('e preserva o texto da pagina', soTitulo.body === 'anotacao da linha');
 
+  // null e valor legitimo nestes campos, entao um patch que nao os cita nao pode apaga-los
+  await updateColumn(colValor.id, { decimals: 2, display: 'bar' });
+  const comCasas = (await readTable(tablePage!.id)).columns.find((c) => c.id === colValor.id);
+  check('casas decimais gravam', comCasas?.decimals === 2, String(comCasas?.decimals));
+  check('modo de exibicao grava', comCasas?.display === 'bar');
+
+  await updateColumn(colValor.id, { name: 'Valor total' });
+  const soNome = (await readTable(tablePage!.id)).columns.find((c) => c.id === colValor.id);
+  check('renomear nao apaga as casas decimais', soNome?.decimals === 2, String(soNome?.decimals));
+  check('nem o modo de exibicao', soNome?.display === 'bar');
+
+  await updateColumn(colValor.id, { decimals: null });
+  const semCasas = (await readTable(tablePage!.id)).columns.find((c) => c.id === colValor.id);
+  check('e da para voltar para automatico', semCasas?.decimals === null, String(semCasas?.decimals));
+
+  await updatePage(tablePage!.id, { groupBy: colLoja.id }, 'owner');
+  const agrupada = await updatePage(tablePage!.id, { title: 'Compras' }, 'owner');
+  check('renomear a pagina nao apaga o agrupamento', agrupada?.groupBy === colLoja.id,
+    String(agrupada?.groupBy));
+  const semGrupo = await updatePage(tablePage!.id, { groupBy: null }, 'owner');
+  check('e da para desagrupar', semGrupo?.groupBy === null, String(semGrupo?.groupBy));
+
   await deleteColumn(colValor.id);
   const semColuna = await readTable(tablePage!.id);
   check('excluir coluna some com ela', semColuna.columns.length === 1);
