@@ -8,6 +8,7 @@ import PropertiesPanel from './PropertiesPanel';
 import AssistantsPage from './AssistantsPage';
 import TablePage from './TablePage';
 import DatabasePage from './DatabasePage';
+import Icon, { PAGE_COLOR } from './Icon';
 import RunAssistantDialog, { type RunResult } from './RunAssistantDialog';
 import ShareDialog from './ShareDialog';
 import MembersDialog from './MembersDialog';
@@ -631,7 +632,9 @@ export default function Workspace() {
             </>
           )}
 
-          <span className="shrink-0 text-base">{activePage.icon}</span>
+          <span className="shrink-0">
+            <Icon name={activePage.type} size={17} color={PAGE_COLOR[activePage.type]} />
+          </span>
           <input
             value={activePage.title}
             readOnly={!isOwner}
@@ -667,10 +670,7 @@ export default function Workspace() {
               className="shrink-0 rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
             >
               <span className="max-md:hidden">Compartilhar</span>
-              <svg className="md:hidden" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5" r="2.6" /><circle cx="6" cy="12" r="2.6" /><circle cx="18" cy="19" r="2.6" />
-                <path d="M8.3 10.8l7.4-4.3M8.3 13.2l7.4 4.3" />
-              </svg>
+              <span className="md:hidden"><Icon name="share" size={17} /></span>
             </button>
           )}
 
@@ -755,7 +755,21 @@ export default function Workspace() {
         )}
 
         {activePage.type === 'database' && (
-          <DatabasePage pageId={activePage.id} canEdit={canEdit} />
+          <DatabasePage
+            pageId={activePage.id}
+            canEdit={canEdit}
+            titleWidth={activePage.titleWidth}
+            onTitleWidth={(w) => {
+              setPages((prev) =>
+                prev.map((p) => (p.id === activePage.id ? { ...p, titleWidth: w } : p)),
+              );
+              fetch('/api/pages/' + activePage.id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ titleWidth: w }),
+              });
+            }}
+          />
         )}
 
         {activePage.type === 'table' && (

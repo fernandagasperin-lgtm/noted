@@ -166,6 +166,10 @@ export function ensureSchema(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )`;
 
+    await sql`ALTER TABLE db_columns ADD COLUMN IF NOT EXISTS width INT NOT NULL DEFAULT 180`;
+    // a coluna de titulo nao vive em db_columns, entao a largura dela fica na pagina
+    await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS title_width INT NOT NULL DEFAULT 320`;
+
     await sql`
       CREATE TABLE IF NOT EXISTS page_favorites (
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

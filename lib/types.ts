@@ -78,6 +78,8 @@ export interface DbColumn {
   /** opcoes das colunas de selecao */
   options: SelectOption[];
   format: NumberFormat;
+  /** largura em pixels, ajustavel arrastando a borda */
+  width: number;
   position: number;
 }
 
@@ -173,6 +175,8 @@ export interface Page {
   favorite: boolean;
   /** o dono compartilhou esta pagina com alguem */
   sharedOut: boolean;
+  /** tabelas: largura da coluna de titulo */
+  titleWidth: number;
   title: string;
   type: PageType;
   icon: string;

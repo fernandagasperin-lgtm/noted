@@ -12,34 +12,16 @@ import {
   type SelectOption,
 } from '@/lib/types';
 import RowDialog from './RowDialog';
-
-/** O Notion identifica o tipo pela cor do icone; sem isso a lista vira texto cinza. */
-const TYPE_COLORS: Record<ColumnType, string> = {
-  text: '#787774',
-  number: '#D9730D',
-  select: '#0F7B6C',
-  multi: '#6940A5',
-  date: '#337EA9',
-  check: '#448361',
-  url: '#2383E2',
-};
-
-const TYPE_ICONS: Record<ColumnType, string> = {
-  text: '≡',
-  number: '#',
-  select: '◉',
-  multi: '⛃',
-  date: '▤',
-  check: '☑',
-  url: '⚯',
-};
+import Icon, { TYPE_COLOR } from './Icon';
 
 interface Props {
   pageId: string;
   canEdit: boolean;
+  titleWidth: number;
+  onTitleWidth: (width: number) => void;
 }
 
-export default function DatabasePage({ pageId, canEdit }: Props) {
+export default function DatabasePage({ pageId, canEdit, titleWidth, onTitleWidth }: Props) {
   const [columns, setColumns] = useState<DbColumn[]>([]);
   const [rows, setRows] = useState<DbRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,6 +123,55 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
     await fetch(`/api/pages/${pageId}/table/rows/${rowId}`, { method: 'DELETE' });
   };
 
+  /**
+   * Arrastar a borda do cabecalho: a largura muda na hora e so vai para o
+   * servidor ao soltar, para nao disparar uma gravacao a cada pixel.
+   */
+  const arrastando = useRef<{ inicioX: number; inicioLargura: number } | null>(null);
+  const [larguraTitulo, setLarguraTitulo] = useState(titleWidth);
+
+  useEffect(() => setLarguraTitulo(titleWidth), [titleWidth]);
+
+  const iniciarArrasto = (
+    e: React.PointerEvent,
+    larguraAtual: number,
+    aoMover: (w: number) => void,
+    aoSoltar: (w: number) => void,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    arrastando.current = { inicioX: e.clientX, inicioLargura: larguraAtual };
+    let ultima = larguraAtual;
+
+    const mover = (ev: PointerEvent) => {
+      const d = arrastando.current;
+      if (!d) return;
+      ultima = Math.max(80, Math.min(800, d.inicioLargura + (ev.clientX - d.inicioX)));
+      aoMover(ultima);
+    };
+    const soltar = () => {
+      arrastando.current = null;
+      window.removeEventListener('pointermove', mover);
+      window.removeEventListener('pointerup', soltar);
+      document.body.style.cursor = '';
+      aoSoltar(ultima);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', mover);
+    window.addEventListener('pointerup', soltar);
+  };
+
+  const Alca = ({ onStart }: { onStart: (e: React.PointerEvent) => void }) =>
+    canEdit ? (
+      <span
+        onPointerDown={onStart}
+        onClick={(e) => e.stopPropagation()}
+        title="Arraste para redimensionar"
+        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-[#2383E2]"
+      />
+    ) : null;
+
   /** Uma opcao nova nasce ao ser digitada, como no Notion. */
   const ensureOption = async (column: DbColumn, name: string): Promise<SelectOption> => {
     const existing = column.options.find(
@@ -169,73 +200,191 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <table className="w-max min-w-full border-collapse">
+      {/* table-fixed com largura explicita: sem isso o navegador dava a sobra
+          para a primeira coluna e ela ignorava o redimensionamento */}
+      <table
+        style={{
+          tableLayout: 'fixed',
+          width: larguraTitulo + columns.reduce((t, c) => t + c.width, 0) + 160,
+        }}
+        className="border-collapse"
+      >
         <thead>
           <tr>
             <th
+              style={{ width: larguraTitulo, minWidth: larguraTitulo }}
               className={
-                'sticky left-0 z-10 w-[190px] min-w-[190px] md:w-[320px] md:min-w-[320px] ' +
-                'border-b border-r border-[#E9E9E7] ' +
-                'bg-white px-2 py-1.5 text-left text-[13px] font-normal text-[#9B9A97]'
+                'sticky left-0 z-10 border-b border-r border-[#E9E9E7] ' +
+                'relative bg-white px-2 py-1.5 text-left text-[13px] font-normal text-[#9B9A97]'
               }
             >
-              <span className="mr-1.5 text-[11px]">Aa</span>
+              <span className="mr-1.5 inline-block align-[-2px]">
+                <Icon name="title" size={13} color="#9B9A97" />
+              </span>
               Nome
+              <Alca
+                onStart={(e) =>
+                  iniciarArrasto(e, larguraTitulo, setLarguraTitulo, onTitleWidth)
+                }
+              />
             </th>
 
             {columns.map((c) => (
               <th
                 key={c.id}
-                className="relative w-[150px] min-w-[150px] border-b border-r border-[#E9E9E7] px-2 py-1.5 text-left text-[13px] font-normal text-[#9B9A97] md:w-[180px] md:min-w-[180px]"
+                style={{ width: c.width, minWidth: c.width }}
+                className="relative border-b border-r border-[#E9E9E7] px-2 py-1.5 text-left text-[13px] font-normal text-[#9B9A97]"
               >
                 <button
                   onClick={() => canEdit && setMenuColumn(menuColumn === c.id ? null : c.id)}
                   className="flex w-full items-center gap-1.5 truncate text-left hover:text-[#37352F]"
                 >
-                  <span className="text-[11px]" style={{ color: TYPE_COLORS[c.type] }}>
-                    {TYPE_ICONS[c.type]}
-                  </span>
+                  <Icon name={c.type} size={14} color={TYPE_COLOR[c.type]} />
                   <span className="truncate">{c.name}</span>
                 </button>
+
+                <Alca
+                  onStart={(e) =>
+                    iniciarArrasto(
+                      e,
+                      c.width,
+                      (w) =>
+                        setColumns((prev) =>
+                          prev.map((x) => (x.id === c.id ? { ...x, width: w } : x)),
+                        ),
+                      (w) => saveColumn(c.id, { width: w }),
+                    )
+                  }
+                />
 
                 {menuColumn === c.id && (
                   <>
                     <div className="fixed inset-0 z-20" onClick={() => setMenuColumn(null)} />
-                    <div className="absolute left-0 top-9 z-30 w-56 rounded-lg border border-[#E9E9E7] bg-white p-1 shadow-lg">
+                    <div className="absolute left-0 top-9 z-30 w-64 rounded-lg border border-[#E9E9E7] bg-white p-1.5 shadow-xl">
                       <input
                         defaultValue={c.name}
                         onBlur={(e) => saveColumn(c.id, { name: e.target.value })}
-                        className="mb-1 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] text-[#37352F] outline-none focus:border-[#2383E2]"
+                        className="mb-2 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] text-[#37352F] outline-none focus:border-[#2383E2]"
                       />
-                      <select
-                        value={c.type}
-                        onChange={(e) => saveColumn(c.id, { type: e.target.value as ColumnType })}
-                        className="mb-1 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] text-[#37352F] outline-none"
-                      >
-                        {Object.entries(COLUMN_LABELS).map(([t, label]) => (
-                          <option key={t} value={t}>
-                            {label}
-                          </option>
+
+                      <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                        Tipo
+                      </div>
+                      <div className="mb-2 max-h-40 overflow-y-auto">
+                        {(Object.keys(COLUMN_LABELS) as ColumnType[]).map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => saveColumn(c.id, { type: t })}
+                            className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[13px] text-[#37352F] hover:bg-[#F1F1EF]"
+                          >
+                            <Icon name={t} size={14} color={TYPE_COLOR[t]} />
+                            <span className="flex-1">{COLUMN_LABELS[t]}</span>
+                            {c.type === t && <span className="text-[#2383E2]">✓</span>}
+                          </button>
                         ))}
-                      </select>
+                      </div>
+
                       {c.type === 'number' && (
-                        <select
-                          value={c.format}
-                          onChange={(e) =>
-                            saveColumn(c.id, { format: e.target.value as NumberFormat })
-                          }
-                          className="mb-1 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] text-[#37352F] outline-none"
-                        >
-                          <option value="plain">Numero</option>
-                          <option value="brl">Real (R$)</option>
-                          <option value="usd">Dolar ($)</option>
-                          <option value="percent">Porcentagem</option>
-                        </select>
+                        <>
+                          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                            Formato
+                          </div>
+                          <select
+                            value={c.format}
+                            onChange={(e) =>
+                              saveColumn(c.id, { format: e.target.value as NumberFormat })
+                            }
+                            className="mb-2 w-full rounded border border-[#E9E9E7] px-2 py-1 text-[13px] text-[#37352F] outline-none"
+                          >
+                            <option value="plain">Numero</option>
+                            <option value="brl">Real (R$)</option>
+                            <option value="usd">Dolar ($)</option>
+                            <option value="percent">Porcentagem</option>
+                          </select>
+                        </>
                       )}
+
+                      {(c.type === 'select' || c.type === 'multi') && (
+                        <>
+                          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                            Opcoes
+                          </div>
+                          <div className="mb-1 max-h-44 space-y-0.5 overflow-y-auto">
+                            {c.options.map((o) => (
+                              <div key={o.id} className="flex items-center gap-1 px-1">
+                                <input
+                                  defaultValue={o.name}
+                                  onBlur={(e) =>
+                                    saveColumn(c.id, {
+                                      options: c.options.map((x) =>
+                                        x.id === o.id ? { ...x, name: e.target.value } : x,
+                                      ),
+                                    })
+                                  }
+                                  className="min-w-0 flex-1 rounded px-1.5 py-0.5 text-[12.5px] text-[#37352F] outline-none"
+                                  style={{ background: o.color }}
+                                />
+                                <div className="flex shrink-0 gap-0.5">
+                                  {OPTION_COLORS.map((cor) => (
+                                    <button
+                                      key={cor}
+                                      title="Trocar a cor"
+                                      onClick={() =>
+                                        saveColumn(c.id, {
+                                          options: c.options.map((x) =>
+                                            x.id === o.id ? { ...x, color: cor } : x,
+                                          ),
+                                        })
+                                      }
+                                      className={
+                                        'h-3 w-3 rounded-full ' +
+                                        (o.color === cor ? 'ring-1 ring-[#37352F]' : '')
+                                      }
+                                      style={{ background: cor }}
+                                    />
+                                  ))}
+                                </div>
+                                <button
+                                  title="Excluir opcao"
+                                  onClick={() =>
+                                    saveColumn(c.id, {
+                                      options: c.options.filter((x) => x.id !== o.id),
+                                    })
+                                  }
+                                  className="shrink-0 text-[#C7C6C4] hover:text-[#EB5757]"
+                                >
+                                  <Icon name="close" size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() =>
+                              saveColumn(c.id, {
+                                options: [
+                                  ...c.options,
+                                  {
+                                    id: crypto.randomUUID(),
+                                    name: 'Opcao ' + (c.options.length + 1),
+                                    color: OPTION_COLORS[c.options.length % OPTION_COLORS.length],
+                                  },
+                                ],
+                              })
+                            }
+                            className="mb-2 flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[13px] text-[#787774] hover:bg-[#F1F1EF]"
+                          >
+                            <Icon name="plus" size={13} />
+                            Nova opcao
+                          </button>
+                        </>
+                      )}
+
+                      <div className="my-1 h-px bg-[#E9E9E7]" />
                       <button
                         onClick={() => removeColumn(c.id)}
-                        className="w-full rounded px-2 py-1 text-left text-[13px] text-[#EB5757] hover:bg-[#FBECEC]"
+                        className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-[13px] text-[#EB5757] hover:bg-[#FBECEC]"
                       >
+                        <Icon name="trash" size={14} />
                         Excluir coluna
                       </button>
                     </div>
@@ -245,7 +394,7 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
             ))}
 
             {/* absorve a largura que sobra, para as colunas nao esticarem */}
-            <th className="w-full border-b border-[#E9E9E7] px-2 py-1.5 text-left">
+            <th className="border-b border-[#E9E9E7] px-2 py-1.5 text-left">
               {canEdit && (
                 <div className="relative inline-block">
                   <button
@@ -268,12 +417,7 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
                             onClick={() => addColumn(t as ColumnType)}
                             className="flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left text-[14px] text-[#37352F] hover:bg-[#F1F1EF]"
                           >
-                            <span
-                              className="w-4 text-center text-[12px]"
-                              style={{ color: TYPE_COLORS[t as ColumnType] }}
-                            >
-                              {TYPE_ICONS[t as ColumnType]}
-                            </span>
+                            <Icon name={t as ColumnType} size={15} color={TYPE_COLOR[t as ColumnType]} />
                             {label}
                           </button>
                         ))}
@@ -289,9 +433,14 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="group">
-              <td className={'sticky left-0 z-10 bg-white ' + cellBase}>
+              <td
+                style={{ width: larguraTitulo, minWidth: larguraTitulo }}
+                className={'sticky left-0 z-10 bg-white ' + cellBase}
+              >
                 <div className="flex items-center gap-1.5">
-                  <span className="shrink-0 text-[12px] text-[#9B9A97]">▢</span>
+                  <span className="shrink-0">
+                    <Icon name="text" size={13} color="#C7C6C4" />
+                  </span>
                   <input
                     value={row.title}
                     readOnly={!canEdit}
@@ -301,17 +450,18 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
                   />
                   <button
                     onClick={() => setOpenRow(row)}
-                    className="shrink-0 rounded border border-[#E9E9E7] px-1.5 py-0.5 text-[11px] text-[#787774] opacity-0 transition hover:bg-[#F7F7F5] group-hover:opacity-100"
+                    className="flex shrink-0 items-center gap-1 rounded border border-[#E9E9E7] px-1.5 py-0.5 text-[11px] text-[#787774] opacity-0 transition hover:bg-[#F7F7F5] group-hover:opacity-100"
                   >
+                    <Icon name="open" size={11} />
                     ABRIR
                   </button>
                   {canEdit && (
                     <button
                       onClick={() => removeRow(row.id)}
                       title="Excluir linha"
-                      className="shrink-0 px-1 text-[13px] text-[#C7C6C4] opacity-0 transition hover:text-[#EB5757] group-hover:opacity-100"
+                      className="shrink-0 px-1 text-[#C7C6C4] opacity-0 transition hover:text-[#EB5757] group-hover:opacity-100"
                     >
-                      ×
+                      <Icon name="close" size={13} />
                     </button>
                   )}
                 </div>
@@ -320,6 +470,7 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
               {columns.map((c) => (
                 <td
                   key={c.id}
+                  style={{ width: c.width, minWidth: c.width }}
                   onClick={() => canEdit && setEditing({ rowId: row.id, columnId: c.id })}
                   className={
                     cellBase +
@@ -338,7 +489,7 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
                   />
                 </td>
               ))}
-              <td className="w-full border-b border-[#E9E9E7]" />
+              <td className="border-b border-[#E9E9E7]" />
             </tr>
           ))}
 

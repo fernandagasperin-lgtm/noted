@@ -56,6 +56,7 @@ function toPage(r: Row): Page {
     role: (r.role as PageRole) ?? 'viewer',
     favorite: Boolean(r.favorite),
     sharedOut: Boolean(r.shared_out),
+    titleWidth: Number(r.title_width ?? 320),
     title: r.title as string,
     type: r.type as Page['type'],
     icon: r.icon as string,
@@ -202,6 +203,7 @@ export async function updatePage(
            icon = COALESCE(${patch.icon ?? null}, icon),
            project_id = COALESCE(${patch.projectId ?? null}, project_id),
            body = COALESCE(${patch.body ?? null}, body),
+           title_width = COALESCE(${patch.titleWidth ?? null}, title_width),
            elements = COALESCE(${patch.elements ? JSON.stringify(patch.elements) : null}::jsonb, elements),
            updated_at = now()
      WHERE id = ${id}
@@ -311,6 +313,7 @@ function toColumn(r: Row): DbColumn {
     type: r.type as DbColumn['type'],
     options: (r.options ?? []) as DbColumn['options'],
     format: (r.format ?? 'plain') as DbColumn['format'],
+    width: Number(r.width ?? 180),
     position: Number(r.position),
   };
 }
@@ -366,6 +369,7 @@ export async function updateColumn(
        SET name = COALESCE(${patch.name ?? null}, name),
            type = COALESCE(${patch.type ?? null}, type),
            format = COALESCE(${patch.format ?? null}, format),
+           width = COALESCE(${patch.width ?? null}, width),
            options = COALESCE(${patch.options ? JSON.stringify(patch.options) : null}::jsonb, options),
            position = COALESCE(${patch.position ?? null}, position)
      WHERE id = ${id}

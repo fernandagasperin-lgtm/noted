@@ -2,17 +2,18 @@
 
 import { useMemo, useState } from 'react';
 import type { Me, Page, PageType, Project } from '@/lib/types';
+import Icon, { PAGE_COLOR } from './Icon';
 
 const INK = '#37352F';
 const MUTED = '#9B9A97';
 const HOVER = '#F1F1EF';
 
-const TIPOS: { tipo: PageType; icone: string; cor: string; rotulo: string }[] = [
-  { tipo: 'canvas', icone: '🎨', cor: '#D9730D', rotulo: 'Quadro' },
-  { tipo: 'database', icone: '▦', cor: '#0F7B6C', rotulo: 'Tabela' },
-  { tipo: 'text', icone: '📄', cor: '#337EA9', rotulo: 'Pagina de texto' },
-  { tipo: 'assistants', icone: '✦', cor: '#6940A5', rotulo: 'Assistentes' },
-  { tipo: 'table', icone: '▤', cor: '#787774', rotulo: 'Relatorio de variacoes' },
+const TIPOS: { tipo: PageType; rotulo: string }[] = [
+  { tipo: 'canvas', rotulo: 'Quadro' },
+  { tipo: 'database', rotulo: 'Tabela' },
+  { tipo: 'text', rotulo: 'Pagina de texto' },
+  { tipo: 'assistants', rotulo: 'Assistentes' },
+  { tipo: 'table', rotulo: 'Relatorio de variacoes' },
 ];
 
 interface Props {
@@ -144,7 +145,9 @@ export default function Sidebar({
         if (page.id !== activeId) e.currentTarget.style.background = '';
       }}
     >
-      <span className="shrink-0 text-[13px]">{page.icon}</span>
+      <span className="shrink-0">
+        <Icon name={page.type} size={15} color={PAGE_COLOR[page.type]} />
+      </span>
 
       {renomeando?.tipo === 'page' && renomeando.id === page.id ? (
         campoRename
@@ -159,12 +162,15 @@ export default function Sidebar({
         }}
         title={page.favorite ? 'Tirar dos favoritos' : 'Favoritar'}
         className={
-          'shrink-0 px-0.5 text-[12px] transition ' +
+          'shrink-0 px-0.5 transition ' +
           (page.favorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
         }
-        style={{ color: page.favorite ? '#D9730D' : MUTED }}
       >
-        {page.favorite ? '★' : '☆'}
+        <Icon
+          name={page.favorite ? 'starFilled' : 'star'}
+          size={13}
+          color={page.favorite ? '#D9730D' : MUTED}
+        />
       </button>
 
       {page.role === 'owner' ? (
@@ -174,18 +180,16 @@ export default function Sidebar({
             if (confirm('Excluir "' + page.title + '"?')) onDeletePage(page.id);
           }}
           title="Excluir pagina"
-          className="shrink-0 px-0.5 text-[13px] opacity-0 transition group-hover:opacity-100"
-          style={{ color: MUTED }}
+          className="shrink-0 px-0.5 opacity-0 transition group-hover:opacity-100"
         >
-          ×
+          <Icon name="close" size={13} color={MUTED} />
         </button>
       ) : (
         <span
           title={page.role === 'editor' ? 'Voce pode editar' : 'Somente leitura'}
-          className="shrink-0 px-0.5 text-[11px]"
-          style={{ color: MUTED }}
+          className="shrink-0 px-0.5"
         >
-          {page.role === 'editor' ? '✎' : '👁'}
+          <Icon name={page.role === 'editor' ? 'pencil' : 'eye'} size={12} color={MUTED} />
         </span>
       )}
     </div>
@@ -205,10 +209,9 @@ export default function Sidebar({
           onMouseLeave={(e) => (e.currentTarget.style.background = '')}
         >
           <span
-            className={'shrink-0 text-[9px] transition-transform ' + (fechado ? '' : 'rotate-90')}
-            style={{ color: MUTED }}
+            className={'shrink-0 transition-transform ' + (fechado ? '' : 'rotate-90')}
           >
-            ▶
+            <Icon name="chevron" size={11} color={MUTED} />
           </span>
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -252,7 +255,7 @@ export default function Sidebar({
                     >
                       Adicionar
                     </div>
-                    {TIPOS.map(({ tipo, icone, cor, rotulo }) => (
+                    {TIPOS.map(({ tipo, rotulo }) => (
                       <button
                         key={tipo}
                         onClick={(e) => {
@@ -263,9 +266,7 @@ export default function Sidebar({
                         className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] hover:bg-[#F1F1EF]"
                         style={{ color: INK }}
                       >
-                        <span className="w-4 text-center text-[12px]" style={{ color: cor }}>
-                          {icone}
-                        </span>
+                        <Icon name={tipo} size={15} color={PAGE_COLOR[tipo]} />
                         {rotulo}
                       </button>
                     ))}
@@ -279,9 +280,7 @@ export default function Sidebar({
                       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] hover:bg-[#F1F1EF]"
                       style={{ color: INK }}
                     >
-                      <span className="w-4 text-center text-[12px]" style={{ color: MUTED }}>
-                        ✎
-                      </span>
+                      <Icon name="pencil" size={15} color={MUTED} />
                       Renomear
                     </button>
                     <button
@@ -297,7 +296,7 @@ export default function Sidebar({
                       }}
                       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] text-[#EB5757] hover:bg-[#FBECEC]"
                     >
-                      <span className="w-4 text-center text-[12px]">🗑</span>
+                      <Icon name="trash" size={15} />
                       Excluir projeto
                     </button>
                   </div>
@@ -343,14 +342,17 @@ export default function Sidebar({
           (open ? 'max-md:translate-x-0' : 'max-md:-translate-x-full')
         }
       >
-        <div className="px-3 pb-1 pt-3">
+        <div className="relative px-3 pb-1 pt-3">
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar..."
-            className="w-full rounded-md border border-[#E9E9E7] bg-white px-2.5 py-1.5 text-[13px] outline-none transition focus:border-[#2383E2]"
+            className="w-full rounded-md border border-[#E9E9E7] bg-white py-1.5 pl-8 pr-2.5 text-[13px] outline-none transition focus:border-[#2383E2]"
             style={{ color: INK }}
           />
+          <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2">
+            <Icon name="search" size={14} color={MUTED} />
+          </span>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 pb-3">
