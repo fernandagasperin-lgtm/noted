@@ -4,7 +4,7 @@
 //   npm test
 
 import { PGlite } from '@electric-sql/pglite';
-import { ensureSchema, useTestDatabase } from '../lib/db';
+import { ensureSchema, sql, useTestDatabase } from '../lib/db';
 import {
   canSeeProject,
   listShares,
@@ -29,7 +29,14 @@ import {
 } from '../lib/users';
 import {
   createAssistant,
+  createColumn,
   createPage,
+  createRow,
+  deleteColumn,
+  deleteRow,
+  readTable,
+  updateColumn,
+  updateRow,
   createProject,
   deletePage,
   deleteProject,
@@ -268,6 +275,69 @@ async function main() {
   const wsBobAssistants = await readWorkspace(me(bob.id));
   check('mas nao no de quem nao ve o projeto',
     !wsBobAssistants.assistants.some((a) => a.id === assistant!.id));
+
+  section('tabelas');
+  const tablePage = await createPage(alice.id, projA.id, 'Compras', 'database');
+  const inicial = await readTable(tablePage!.id);
+  check('tabela nova ja vem com colunas utilizaveis', inicial.columns.length === 2,
+    `${inicial.columns.length} colunas`);
+  check('e sem linhas', inicial.rows.length === 0);
+
+  const colValor = await createColumn(tablePage!.id, 'Valor', 'number');
+  await updateColumn(colValor.id, { format: 'brl' });
+  const colLoja = await createColumn(tablePage!.id, 'Loja', 'multi');
+  await updateColumn(colLoja.id, {
+    options: [
+      { id: 'o1', name: 'nissei', color: '#FADEC9' },
+      { id: 'o2', name: 'cellshop', color: '#D3E5EF' },
+    ],
+  });
+
+  const depoisDeColunas = await readTable(tablePage!.id);
+  check('colunas novas entram na ordem', depoisDeColunas.columns.length === 4);
+  check('formato de moeda e guardado',
+    depoisDeColunas.columns.find((c) => c.id === colValor.id)?.format === 'brl');
+  check('opcoes de selecao sao guardadas',
+    depoisDeColunas.columns.find((c) => c.id === colLoja.id)?.options.length === 2);
+
+  const linha = await createRow(tablePage!.id, 'Drone DJI');
+  await updateRow(linha.id, {
+    values: { [colValor.id]: 509, [colLoja.id]: ['o1', 'o2'] },
+    body: 'anotacao da linha',
+  });
+  const comLinha = await readTable(tablePage!.id);
+  const salva = comLinha.rows[0];
+  check('titulo da linha grava', salva.title === 'Drone DJI');
+  check('numero grava', salva.values[colValor.id] === 509);
+  check('multi-selecao grava uma lista',
+    Array.isArray(salva.values[colLoja.id]) &&
+      (salva.values[colLoja.id] as string[]).length === 2);
+  check('o texto da pagina da linha grava', salva.body === 'anotacao da linha');
+
+  // trocar o titulo nao pode apagar os valores das outras colunas
+  await updateRow(linha.id, { title: 'Drone DJI Mini 4K' });
+  const soTitulo = (await readTable(tablePage!.id)).rows[0];
+  check('editar so o titulo preserva os valores', soTitulo.values[colValor.id] === 509);
+  check('e preserva o texto da pagina', soTitulo.body === 'anotacao da linha');
+
+  await deleteColumn(colValor.id);
+  const semColuna = await readTable(tablePage!.id);
+  check('excluir coluna some com ela', semColuna.columns.length === 3);
+  check('e limpa o valor orfao das linhas',
+    !(colValor.id in semColuna.rows[0].values),
+    JSON.stringify(semColuna.rows[0].values));
+  check('sem tocar nos valores das outras colunas',
+    Array.isArray(semColuna.rows[0].values[colLoja.id]));
+
+  const outraLinha = await createRow(tablePage!.id, 'Segunda');
+  check('linhas novas entram depois', (await readTable(tablePage!.id)).rows.length === 2);
+  await deleteRow(outraLinha.id);
+  check('e podem ser excluidas', (await readTable(tablePage!.id)).rows.length === 1);
+
+  // a tabela e uma pagina: excluir a pagina tem que levar colunas e linhas junto
+  await deletePage(tablePage!.id, alice.id);
+  const orfas = await sql`SELECT count(*)::int AS n FROM db_rows WHERE page_id = ${tablePage!.id}`;
+  check('excluir a pagina leva as linhas junto', (orfas[0].n as number) === 0);
 
   section('presenca');
   await touchPresence(pageA.id, alice.id);

@@ -69,7 +69,7 @@ export default function LoginPage() {
         className="w-full max-w-xs space-y-4 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-lg shadow-slate-900/[0.06]"
       >
         <div>
-          <h1 className="text-[17px] font-semibold tracking-tight text-slate-900">Quadro</h1>
+          <h1 className="text-[17px] font-semibold tracking-tight text-slate-900">noted</h1>
           <p className="mt-0.5 text-[13px] text-slate-400">
             {mode === 'setup'
               ? 'Crie a conta de administrador do workspace.'

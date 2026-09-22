@@ -1,4 +1,4 @@
-# Quadro
+# noted
 
 Ferramenta interna de quadro visual: canvas no estilo Miro com a organização em
 projetos, páginas e tabelas do Notion, mais assistentes de prompt reutilizáveis.

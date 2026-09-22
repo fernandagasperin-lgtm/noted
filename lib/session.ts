@@ -1,7 +1,7 @@
 // Edge-safe: only jose, no node:crypto. The middleware runs this.
 import { SignJWT, jwtVerify } from 'jose';
 
-export const SESSION_COOKIE = 'quadro_session';
+export const SESSION_COOKIE = 'noted_session';
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 function secret(): Uint8Array {

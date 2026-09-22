@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'Quadro',
-  description: 'Quadro visual interno',
+  title: 'noted',
+  description: 'Quadros, tabelas e assistentes de prompt',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

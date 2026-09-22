@@ -5,6 +5,8 @@ import {
   PROJECT_COLORS,
   type Assistant,
   type BoardElement,
+  type DbColumn,
+  type DbRow,
   type Me,
   type Page,
   type PageRole,
@@ -15,8 +17,9 @@ import {
 const PAGE_ICONS: Record<Page['type'], string> = {
   canvas: '🎨',
   text: '📄',
-  table: '▦',
+  table: '▤',
   assistants: '✦',
+  database: '▦',
 };
 
 type Row = Record<string, unknown>;
@@ -283,4 +286,137 @@ async function dropDanglingRefs(removedPageIds: string[]) {
              )
        WHERE elements @> ${JSON.stringify([{ type: 'reference', refPageId: pageId }])}::jsonb`;
   }
+}
+
+// ---------- tabelas (paginas do tipo database) ----------
+
+function toColumn(r: Row): DbColumn {
+  return {
+    id: r.id as string,
+    pageId: r.page_id as string,
+    name: r.name as string,
+    type: r.type as DbColumn['type'],
+    options: (r.options ?? []) as DbColumn['options'],
+    format: (r.format ?? 'plain') as DbColumn['format'],
+    position: Number(r.position),
+  };
+}
+
+function toRow(r: Row): DbRow {
+  return {
+    id: r.id as string,
+    pageId: r.page_id as string,
+    title: r.title as string,
+    values: (r.cells ?? {}) as Record<string, unknown>,
+    body: r.body as string,
+    position: Number(r.position),
+    createdAt: iso(r.created_at),
+    updatedAt: iso(r.updated_at),
+  };
+}
+
+/** Uma tabela recem-criada ja vem utilizavel, em vez de uma grade vazia. */
+export async function readTable(
+  pageId: string,
+): Promise<{ columns: DbColumn[]; rows: DbRow[] }> {
+  await ensureSchema();
+  let columns = await sql`
+    SELECT * FROM db_columns WHERE page_id = ${pageId} ORDER BY position, created_at`;
+
+  if (columns.length === 0) {
+    await createColumn(pageId, 'Status', 'select');
+    await createColumn(pageId, 'Data', 'date');
+    columns = await sql`
+      SELECT * FROM db_columns WHERE page_id = ${pageId} ORDER BY position, created_at`;
+  }
+
+  const rows = await sql`
+    SELECT * FROM db_rows WHERE page_id = ${pageId} ORDER BY position, created_at`;
+  return { columns: columns.map(toColumn), rows: rows.map(toRow) };
+}
+
+export async function createColumn(
+  pageId: string,
+  name: string,
+  type: DbColumn['type'],
+): Promise<DbColumn> {
+  await ensureSchema();
+  const [{ next }] = await sql`
+    SELECT COALESCE(MAX(position) + 1, 0)::int AS next FROM db_columns WHERE page_id = ${pageId}`;
+  const [row] = await sql`
+    INSERT INTO db_columns (id, page_id, name, type, position)
+    VALUES (${randomUUID()}, ${pageId}, ${name}, ${type}, ${next as number})
+    RETURNING *`;
+  return toColumn(row);
+}
+
+export async function updateColumn(
+  id: string,
+  patch: Partial<DbColumn>,
+): Promise<DbColumn | null> {
+  await ensureSchema();
+  const [row] = await sql`
+    UPDATE db_columns
+       SET name = COALESCE(${patch.name ?? null}, name),
+           type = COALESCE(${patch.type ?? null}, type),
+           format = COALESCE(${patch.format ?? null}, format),
+           options = COALESCE(${patch.options ? JSON.stringify(patch.options) : null}::jsonb, options),
+           position = COALESCE(${patch.position ?? null}, position)
+     WHERE id = ${id}
+    RETURNING *`;
+  return row ? toColumn(row) : null;
+}
+
+export async function deleteColumn(id: string): Promise<boolean> {
+  await ensureSchema();
+  const [gone] = await sql`DELETE FROM db_columns WHERE id = ${id} RETURNING page_id`;
+  if (!gone) return false;
+  // os valores daquela coluna deixam de ter sentido nas linhas
+  await sql`
+    UPDATE db_rows SET cells = cells - ${id}
+     WHERE page_id = ${gone.page_id as string} AND cells ? ${id}`;
+  return true;
+}
+
+export async function createRow(pageId: string, title = ''): Promise<DbRow> {
+  await ensureSchema();
+  const [{ next }] = await sql`
+    SELECT COALESCE(MAX(position) + 1, 0)::int AS next FROM db_rows WHERE page_id = ${pageId}`;
+  const [row] = await sql`
+    INSERT INTO db_rows (id, page_id, title, position)
+    VALUES (${randomUUID()}, ${pageId}, ${title}, ${next as number})
+    RETURNING *`;
+  return toRow(row);
+}
+
+export async function updateRow(id: string, patch: Partial<DbRow>): Promise<DbRow | null> {
+  await ensureSchema();
+  const [row] = await sql`
+    UPDATE db_rows
+       SET title = COALESCE(${patch.title ?? null}, title),
+           body = COALESCE(${patch.body ?? null}, body),
+           cells = COALESCE(${patch.values ? JSON.stringify(patch.values) : null}::jsonb, cells),
+           position = COALESCE(${patch.position ?? null}, position),
+           updated_at = now()
+     WHERE id = ${id}
+    RETURNING *`;
+  return row ? toRow(row) : null;
+}
+
+export async function deleteRow(id: string): Promise<boolean> {
+  await ensureSchema();
+  const [gone] = await sql`DELETE FROM db_rows WHERE id = ${id} RETURNING id`;
+  return Boolean(gone);
+}
+
+export async function getColumnPage(id: string): Promise<string | null> {
+  await ensureSchema();
+  const [row] = await sql`SELECT page_id FROM db_columns WHERE id = ${id}`;
+  return row ? (row.page_id as string) : null;
+}
+
+export async function getRowPage(id: string): Promise<string | null> {
+  await ensureSchema();
+  const [row] = await sql`SELECT page_id FROM db_rows WHERE id = ${id}`;
+  return row ? (row.page_id as string) : null;
 }

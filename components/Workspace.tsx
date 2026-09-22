@@ -7,6 +7,7 @@ import Toolbar, { type Tool } from './Toolbar';
 import PropertiesPanel from './PropertiesPanel';
 import AssistantsPage from './AssistantsPage';
 import TablePage from './TablePage';
+import DatabasePage from './DatabasePage';
 import RunAssistantDialog, { type RunResult } from './RunAssistantDialog';
 import ShareDialog from './ShareDialog';
 import MembersDialog from './MembersDialog';
@@ -382,8 +383,9 @@ export default function Workspace() {
     const titles: Record<PageType, string> = {
       canvas: 'Novo quadro',
       text: 'Nova pagina',
-      table: 'Nova tabela',
+      table: 'Relatorio de variacoes',
       assistants: 'Assistentes',
+      database: 'Nova tabela',
     };
     const res = await fetch('/api/pages', {
       method: 'POST',
@@ -740,6 +742,10 @@ export default function Workspace() {
             onChange={updateAssistant}
             onDelete={deleteAssistant}
           />
+        )}
+
+        {activePage.type === 'database' && (
+          <DatabasePage pageId={activePage.id} canEdit={canEdit} />
         )}
 
         {activePage.type === 'table' && (

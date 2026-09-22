@@ -168,6 +168,12 @@ export default function Sidebar({
                           onClick={(e) => { e.stopPropagation(); onCreatePage(project.id, 'table'); setMenuFor(null); }}
                           className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
                         >
+                          Relatorio de variacoes
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onCreatePage(project.id, 'database'); setMenuFor(null); }}
+                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
+                        >
                           Nova tabela
                         </button>
                         <button

@@ -50,7 +50,86 @@ export interface BoardElement {
   producedAt?: string;
 }
 
-export type PageType = 'canvas' | 'text' | 'table' | 'assistants';
+export type PageType = 'canvas' | 'text' | 'table' | 'assistants' | 'database';
+
+export type ColumnType =
+  | 'text'
+  | 'number'
+  | 'select'
+  | 'multi'
+  | 'date'
+  | 'check'
+  | 'url';
+
+/** Como o numero e apresentado; nao muda o que fica guardado. */
+export type NumberFormat = 'plain' | 'brl' | 'usd' | 'percent';
+
+export interface SelectOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface DbColumn {
+  id: string;
+  pageId: string;
+  name: string;
+  type: ColumnType;
+  /** opcoes das colunas de selecao */
+  options: SelectOption[];
+  format: NumberFormat;
+  position: number;
+}
+
+export interface DbRow {
+  id: string;
+  pageId: string;
+  /** a coluna principal, que abre a linha como pagina */
+  title: string;
+  /** valores das demais colunas, por id de coluna */
+  values: Record<string, unknown>;
+  /** o texto livre da pagina da linha */
+  body: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Tons suaves, no espirito do Notion: legiveis sem gritar. */
+export const OPTION_COLORS = [
+  '#E8E8E6',
+  '#FFE2DD',
+  '#FADEC9',
+  '#FDECC8',
+  '#DBEDDB',
+  '#D3E5EF',
+  '#E8DEEE',
+  '#F5E0E9',
+];
+
+export const COLUMN_LABELS: Record<ColumnType, string> = {
+  text: 'Texto',
+  number: 'Numero',
+  select: 'Selecao',
+  multi: 'Multi-selecao',
+  date: 'Data',
+  check: 'Caixa',
+  url: 'Link',
+};
+
+export function formatNumber(value: unknown, format: NumberFormat): string {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  if (format === 'percent') return n.toLocaleString('pt-BR') + '%';
+  if (format === 'brl') {
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  if (format === 'usd') {
+    return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  }
+  return n.toLocaleString('pt-BR');
+}
 
 export type PageRole = 'owner' | 'editor' | 'viewer';
 

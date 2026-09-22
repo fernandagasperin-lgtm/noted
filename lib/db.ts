@@ -140,6 +140,34 @@ export function ensureSchema(): Promise<void> {
         PRIMARY KEY (page_id, user_id)
       )`;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS db_columns (
+        id         TEXT PRIMARY KEY,
+        page_id    TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        name       TEXT NOT NULL,
+        type       TEXT NOT NULL,
+        options    JSONB NOT NULL DEFAULT '[]'::jsonb,
+        format     TEXT NOT NULL DEFAULT 'plain',
+        position   INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`;
+
+    // Uma linha por registro, e nao a tabela inteira num bloco so: assim duas
+    // pessoas editando linhas diferentes nao sobrescrevem uma a outra.
+    await sql`
+      CREATE TABLE IF NOT EXISTS db_rows (
+        id         TEXT PRIMARY KEY,
+        page_id    TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+        title      TEXT NOT NULL DEFAULT '',
+        cells      JSONB NOT NULL DEFAULT '{}'::jsonb,
+        body       TEXT NOT NULL DEFAULT '',
+        position   INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`;
+
+    await sql`CREATE INDEX IF NOT EXISTS db_columns_page_idx ON db_columns(page_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS db_rows_page_idx ON db_rows(page_id)`;
     await sql`CREATE INDEX IF NOT EXISTS pages_project_idx ON pages(project_id)`;
     await sql`CREATE INDEX IF NOT EXISTS pages_owner_idx ON pages(owner_id)`;
     await sql`CREATE INDEX IF NOT EXISTS assistants_project_idx ON assistants(project_id)`;
