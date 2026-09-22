@@ -43,3 +43,5 @@ next-env.d.ts
 data/
 public/uploads/
 
+# logs de execucao local
+*.log
