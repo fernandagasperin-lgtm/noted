@@ -151,45 +151,41 @@ export default function Sidebar({
                   {menuFor === project.id && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuFor(null); }} />
-                      <div className="absolute right-0 top-6 z-20 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg shadow-slate-900/5">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onCreatePage(project.id, 'canvas'); setMenuFor(null); }}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
-                        >
-                          Novo quadro
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onCreatePage(project.id, 'text'); setMenuFor(null); }}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
-                        >
-                          Nova pagina de texto
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onCreatePage(project.id, 'table'); setMenuFor(null); }}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
-                        >
-                          Relatorio de variacoes
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onCreatePage(project.id, 'database'); setMenuFor(null); }}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
-                        >
-                          Nova tabela
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onCreatePage(project.id, 'assistants'); setMenuFor(null); }}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
-                        >
-                          Pagina de assistentes
-                        </button>
-                        <div className="my-1 h-px bg-slate-100" />
+                      <div className="absolute right-0 top-6 z-20 w-56 overflow-hidden rounded-xl border border-[#E9E9E7] bg-white py-1 shadow-xl">
+                        <div className="px-3 py-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                          Adicionar
+                        </div>
+                        {([
+                          ['canvas', '🎨', '#D9730D', 'Quadro'],
+                          ['database', '▦', '#0F7B6C', 'Tabela'],
+                          ['text', '📄', '#337EA9', 'Pagina de texto'],
+                          ['assistants', '✦', '#6940A5', 'Assistentes'],
+                          ['table', '▤', '#787774', 'Relatorio de variacoes'],
+                        ] as const).map(([tipo, icone, cor, rotulo]) => (
+                          <button
+                            key={tipo}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onCreatePage(project.id, tipo);
+                              setMenuFor(null);
+                            }}
+                            className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] text-[#37352F] hover:bg-[#F1F1EF]"
+                          >
+                            <span className="w-4 text-center text-[12px]" style={{ color: cor }}>
+                              {icone}
+                            </span>
+                            {rotulo}
+                          </button>
+                        ))}
+
+                        <div className="my-1 h-px bg-[#E9E9E7]" />
                         <button
                           onClick={(e) => { e.stopPropagation(); startRename('project', project.id, project.name); }}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-50"
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] text-[#37352F] hover:bg-[#F1F1EF]"
                         >
+                          <span className="w-4 text-center text-[12px] text-[#9B9A97]">✎</span>
                           Renomear
                         </button>
-                        <div className="my-1 h-px bg-slate-100" />
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -197,8 +193,9 @@ export default function Sidebar({
                             if (confirm('Excluir o projeto "' + project.name + '" e todas as suas paginas?'))
                               onDeleteProject(project.id);
                           }}
-                          className="block w-full px-3 py-1.5 text-left text-[13px] text-rose-600 hover:bg-rose-50"
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] text-[#EB5757] hover:bg-[#FBECEC]"
                         >
+                          <span className="w-4 text-center text-[12px]">🗑</span>
                           Excluir projeto
                         </button>
                       </div>

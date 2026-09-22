@@ -13,6 +13,17 @@ import {
 } from '@/lib/types';
 import RowDialog from './RowDialog';
 
+/** O Notion identifica o tipo pela cor do icone; sem isso a lista vira texto cinza. */
+const TYPE_COLORS: Record<ColumnType, string> = {
+  text: '#787774',
+  number: '#D9730D',
+  select: '#0F7B6C',
+  multi: '#6940A5',
+  date: '#337EA9',
+  check: '#448361',
+  url: '#2383E2',
+};
+
 const TYPE_ICONS: Record<ColumnType, string> = {
   text: '≡',
   number: '#',
@@ -181,7 +192,9 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
                   onClick={() => canEdit && setMenuColumn(menuColumn === c.id ? null : c.id)}
                   className="flex w-full items-center gap-1.5 truncate text-left hover:text-[#37352F]"
                 >
-                  <span className="text-[11px]">{TYPE_ICONS[c.type]}</span>
+                  <span className="text-[11px]" style={{ color: TYPE_COLORS[c.type] }}>
+                    {TYPE_ICONS[c.type]}
+                  </span>
                   <span className="truncate">{c.name}</span>
                 </button>
 
@@ -231,14 +244,10 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
               </th>
             ))}
 
-            <th
-              className={
-                'relative border-b border-[#E9E9E7] px-2 py-1.5 text-left ' +
-                (columns.length === 0 ? 'w-auto' : 'w-12')
-              }
-            >
+            {/* absorve a largura que sobra, para as colunas nao esticarem */}
+            <th className="w-full border-b border-[#E9E9E7] px-2 py-1.5 text-left">
               {canEdit && (
-                <>
+                <div className="relative inline-block">
                   <button
                     onClick={() => setAddingColumn(!addingColumn)}
                     title="Nova coluna"
@@ -249,14 +258,20 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
                   {addingColumn && (
                     <>
                       <div className="fixed inset-0 z-20" onClick={() => setAddingColumn(false)} />
-                      <div className="absolute right-0 top-9 z-30 w-44 rounded-lg border border-[#E9E9E7] bg-white p-1 shadow-lg">
+                      <div className="absolute left-0 top-7 z-30 w-52 rounded-lg border border-[#E9E9E7] bg-white p-1 shadow-xl">
+                        <div className="px-2 py-1 text-[11px] uppercase tracking-wide text-[#9B9A97]">
+                          Tipo da propriedade
+                        </div>
                         {Object.entries(COLUMN_LABELS).map(([t, label]) => (
                           <button
                             key={t}
                             onClick={() => addColumn(t as ColumnType)}
-                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-[#37352F] hover:bg-[#F7F7F5]"
+                            className="flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left text-[14px] text-[#37352F] hover:bg-[#F1F1EF]"
                           >
-                            <span className="w-3 text-[11px] text-[#9B9A97]">
+                            <span
+                              className="w-4 text-center text-[12px]"
+                              style={{ color: TYPE_COLORS[t as ColumnType] }}
+                            >
                               {TYPE_ICONS[t as ColumnType]}
                             </span>
                             {label}
@@ -265,7 +280,7 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
                       </div>
                     </>
                   )}
-                </>
+                </div>
               )}
             </th>
           </tr>
@@ -323,7 +338,7 @@ export default function DatabasePage({ pageId, canEdit }: Props) {
                   />
                 </td>
               ))}
-              <td className="border-b border-[#E9E9E7]" />
+              <td className="w-full border-b border-[#E9E9E7]" />
             </tr>
           ))}
 
