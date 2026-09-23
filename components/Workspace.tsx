@@ -434,14 +434,27 @@ export default function Workspace() {
   const moveMany = useCallback(
     (movimentos: { id: string; x: number; y: number }[]) => {
       const porId = new Map(movimentos.map((m) => [m.id, m]));
-      setElements((prev) =>
+      const prox = (prev: BoardElement[]) =>
         prev.map((el) => {
           const m = porId.get(el.id);
           return m ? { ...el, x: m.x, y: m.y } : el;
-        }),
-      );
+        });
+      setElements(prox);
+      // Persistir os novos positions no banco.
+      const atual = pagesRef.current.find((p) => p.id === activeId);
+      if (atual) {
+        const proxPagina = { ...atual, elements: prox(atual.elements) };
+        pagesRef.current = pagesRef.current.map((p) =>
+          p.id === atual.id ? proxPagina : p,
+        );
+        fetch('/api/pages/' + activeId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ elements: proxPagina.elements }),
+        });
+      }
     },
-    [setElements],
+    [activeId, setElements],
   );
 
   /**
