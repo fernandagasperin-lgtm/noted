@@ -66,12 +66,14 @@ const DEFAULTS: Record<ElementType, { width: number; height: number; content: st
   assistant: { width: 260, height: 96, content: '' },
   derivation: { width: 270, height: 170, content: '' },
   minitable: { ...miniSize(MINI_PADRAO), content: '' },
+  frame: { width: 400, height: 300, content: 'Frame' },
 };
 
 const FILL_BY_TYPE: Partial<Record<ElementType, string>> = {
   rectangle: '#FFFFFF',
   ellipse: '#FFFFFF',
   sticky: '#FFF9B1',
+  frame: 'transparent',
 };
 
 const STROKE_BY_TYPE: Partial<Record<ElementType, string>> = {
@@ -80,6 +82,7 @@ const STROKE_BY_TYPE: Partial<Record<ElementType, string>> = {
   sticky: '#334155',
   text: '#334155',
   arrow: '#64748B',
+  frame: '#94A3B8',
 };
 
 export default function Workspace() {

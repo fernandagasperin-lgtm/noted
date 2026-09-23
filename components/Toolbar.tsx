@@ -11,7 +11,8 @@ export type Tool =
   | 'arrow'
   | 'reference'
   | 'assistant'
-  | 'minitable';
+  | 'minitable'
+  | 'frame';
 
 const TOOLS: { id: Tool; label: string; hint: string; icon: React.ReactNode }[] = [
   {
@@ -88,6 +89,17 @@ const TOOLS: { id: Tool; label: string; hint: string; icon: React.ReactNode }[] 
       <g fill="none" stroke="currentColor" strokeWidth="1.7">
         <rect x="4" y="5" width="16" height="14" rx="2" />
         <path d="M4 10h16M10 10v9M4 14.5h16" strokeLinecap="round" />
+      </g>
+    ),
+  },
+  {
+    id: 'frame',
+    label: 'Frame',
+    hint: 'F',
+    icon: (
+      <g fill="none" stroke="currentColor" strokeWidth="1.7">
+        <rect x="5" y="5" width="14" height="14" rx="2" />
+        <path d="M5 8h14M8 5v14M12 5v14" strokeDasharray="2,2" strokeLinecap="round" />
       </g>
     ),
   },

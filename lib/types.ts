@@ -8,7 +8,8 @@ export type ElementType =
   | 'reference'
   | 'assistant'
   | 'derivation'
-  | 'minitable';
+  | 'minitable'
+  | 'frame';
 
 export interface Style {
   fill: string;

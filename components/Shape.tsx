@@ -606,6 +606,34 @@ export default function Shape({
       );
     }
 
+    case 'frame':
+      return (
+        <Group {...common} onDblClick={onEditText} onDblTap={onEditText}>
+          <Rect
+            width={el.width}
+            height={el.height}
+            fill="transparent"
+            stroke="#94A3B8"
+            strokeWidth={1.5}
+            strokeDasharray={[5, 3]}
+            cornerRadius={6}
+          />
+          {el.content && (
+            <Text
+              x={8}
+              y={-6}
+              text={el.content}
+              fontSize={13}
+              fontFamily="Inter, system-ui, sans-serif"
+              fontStyle="600"
+              fill="#64748B"
+              listening={false}
+              width={el.width - 16}
+            />
+          )}
+        </Group>
+      );
+
     default:
       return null;
   }
