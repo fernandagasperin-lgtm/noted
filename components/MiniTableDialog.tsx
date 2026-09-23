@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
-import { colName, displayValue, evaluateGrid, refOf } from '@/lib/formula';
+import { displayValue, evaluateGrid, refOf } from '@/lib/formula';
 import type { MiniTable, Page } from '@/lib/types';
 
 interface Props {
@@ -26,6 +26,7 @@ export default function MiniTableDialog({
   onClose,
 }: Props) {
   const [foco, setFoco] = useState<string | null>(null);
+  const [mostrarAvancado, setMostrarAvancado] = useState(false);
 
   /**
    * Preencher uma tabela e teclar, nao clicar: Enter desce, Tab anda para o
@@ -109,24 +110,26 @@ export default function MiniTableDialog({
     mudar({ cols: t.cols - 1, widths: novas, cells });
   };
 
-  const tirarLinha = () => {
+  const tirarLinha = (row?: number) => {
     if (t.rows <= 1) return;
-    const ultima = t.rows - 1;
-    const cells = { ...t.cells };
-    for (let c = 0; c < t.cols; c++) delete cells[refOf(c, ultima)];
-    mudar({ rows: ultima, cells });
-  };
+    const idx = row ?? t.rows - 1;
+    if (idx < 0 || idx >= t.rows) return;
 
-  const somarColuna = (c: number) => {
-    const primeira = t.header ? 1 : 0;
-    const ultima = t.rows - 1;
-    if (ultima <= primeira) return;
-    const destino = refOf(c, ultima);
-    setCelula(
-      destino,
-      `=SOMA(${refOf(c, primeira)}:${refOf(c, ultima - 1)})`,
-    );
-    setFoco(destino);
+    const cells = { ...t.cells };
+    // Apagar celulas da linha
+    for (let c = 0; c < t.cols; c++) delete cells[refOf(c, idx)];
+    // Deslocar referencias das linhas apos a deletada
+    for (let c = 0; c < t.cols; c++) {
+      for (let r = idx + 1; r < t.rows; r++) {
+        const velho = refOf(c, r);
+        if (velho in cells) {
+          const novo = refOf(c, r - 1);
+          cells[novo] = cells[velho];
+          delete cells[velho];
+        }
+      }
+    }
+    mudar({ rows: t.rows - 1, cells });
   };
 
   return (
@@ -149,36 +152,44 @@ export default function MiniTableDialog({
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-5">
-          <table className="border-separate border-spacing-0 text-[13px]">
+          <table className="border-separate border-spacing-0 text-[13px] group/tabela">
             <thead>
               <tr>
-                <th className="w-8" />
+                <th className="w-6" />
                 {Array.from({ length: t.cols }, (_, c) => (
                   <th
                     key={c}
                     style={{ minWidth: t.widths[c] ?? LARGURA_PADRAO }}
-                    className="pb-1 text-center text-[11px] font-medium text-slate-400"
+                    className="pb-0.5 text-center opacity-0 group-hover/tabela:opacity-100 transition-opacity"
                   >
-                    <div className="flex items-center justify-center gap-1">
-                      <span>{colName(c)}</span>
-                      {canEdit && t.cols > 1 && (
-                        <button
-                          onClick={() => tirarColuna(c)}
-                          title="Apagar coluna"
-                          className="rounded px-1.5 py-0.5 text-[11px] text-slate-400 transition hover:bg-red-50 hover:text-red-600 font-medium"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
+                    {canEdit && t.cols > 1 && (
+                      <button
+                        onClick={() => tirarColuna(c)}
+                        title="Apagar coluna"
+                        className="rounded px-1 py-0.5 text-[13px] leading-none text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                      >
+                        ×
+                      </button>
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: t.rows }, (_, r) => (
-                <tr key={r} className={!t.header && r === 0 ? 'hidden' : ''}>
-                  <td className="pr-1 text-right text-[11px] text-slate-300">{r + 1}</td>
+                <tr key={r} className={!t.header && r === 0 ? 'hidden' : 'group/linha'}>
+                  <td className="pr-1 text-right text-[11px] text-slate-300 relative">
+                    <span className="group-hover/linha:opacity-0 transition-opacity">{r + 1}</span>
+                    {canEdit && t.rows > 1 && (
+                      <button
+                        onClick={() => tirarLinha(r)}
+                        title="Apagar linha"
+                        className="absolute inset-0 opacity-0 group-hover/linha:opacity-100 transition-opacity text-slate-300 hover:text-red-500"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </td>
                   {Array.from({ length: t.cols }, (_, c) => {
                     const ref = refOf(c, r);
                     const bruto = t.cells[ref] ?? '';
@@ -235,61 +246,66 @@ export default function MiniTableDialog({
           </table>
 
           {canEdit && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-[12.5px]">
-              <button onClick={addLinha} className={botao}>+ Linha</button>
-              {t.rows > 1 && (
-                <button onClick={() => tirarLinha()} className={botao}>− Linha</button>
-              )}
-              <button onClick={addColuna} className={botao}>+ Coluna</button>
-              <label className="flex items-center gap-1.5 text-slate-500">
+            <div className="mt-3 flex items-center gap-3 text-[12px] text-slate-400">
+              <button
+                onClick={addLinha}
+                title="Adicionar linha"
+                className="rounded px-1.5 py-0.5 hover:bg-slate-100 hover:text-slate-700 transition"
+              >
+                + linha
+              </button>
+              <button
+                onClick={addColuna}
+                title="Adicionar coluna"
+                className="rounded px-1.5 py-0.5 hover:bg-slate-100 hover:text-slate-700 transition"
+              >
+                + coluna
+              </button>
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-700">
                 <input
                   type="checkbox"
                   checked={t.header}
                   onChange={(e) => mudar({ header: e.target.checked })}
-                  className="accent-blue-500"
+                  className="accent-blue-500 h-3 w-3"
                 />
-                Cabeçalho
+                cabeçalho
               </label>
+
+              <div className="flex-1" />
+
+              <button
+                onClick={() => setMostrarAvancado((v) => !v)}
+                className="text-[11px] hover:text-slate-700 transition"
+              >
+                {mostrarAvancado ? 'Menos' : 'Mais'} opções
+              </button>
             </div>
           )}
 
-          {canEdit && (
-            <div className="mt-4 rounded-xl bg-slate-50 p-3.5">
-              <label className="block text-[12px] font-medium text-slate-600">
-                Vincular a uma tabela do mural
-              </label>
+          {canEdit && mostrarAvancado && (
+            <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
               <select
                 value={t.linkedPageId ?? ''}
                 onChange={(e) => mudar({ linkedPageId: e.target.value || undefined })}
-                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-700 outline-none focus:border-blue-400"
+                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12.5px] text-slate-600 outline-none focus:border-blue-400"
               >
-                <option value="">Nenhuma — esta tabela vive sozinha</option>
+                <option value="">Vincular a uma tabela do mural…</option>
                 {tabelasGrandes.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.title}
                   </option>
                 ))}
               </select>
-              {t.linkedPageId && (
-                <p className="mt-2 text-[11.5px] leading-relaxed text-slate-500">
-                  Use <code className="rounded bg-white px-1">=COLUNA(&quot;Nome&quot;)</code> para
-                  trazer a soma de uma coluna de numeros daquela tabela.
-                  {linked && Object.keys(linked).length > 0 && (
-                    <> Disponiveis: {Object.keys(linked).join(', ')}.</>
-                  )}
-                </p>
-              )}
+              <p className="text-[11px] leading-relaxed text-slate-400">
+                Fórmulas: comece com <code className="rounded bg-slate-100 px-1">=</code>. Ex: <code className="rounded bg-slate-100 px-1">=SOMA(A:A)</code>, <code className="rounded bg-slate-100 px-1">=A2*B2</code>
+                {t.linkedPageId && (
+                  <> · <code className="rounded bg-slate-100 px-1">=COLUNA(&quot;Nome&quot;)</code> soma coluna da tabela vinculada.</>
+                )}
+              </p>
             </div>
           )}
-
-          <p className="mt-4 text-[11.5px] leading-relaxed text-slate-400">
-            Digite <code className="rounded bg-slate-100 px-1">=</code> para calcular. Ex: <code className="rounded bg-slate-100 px-1">=SOMA(A:A)</code>, <code className="rounded bg-slate-100 px-1">=A2*B2</code>
-          </p>
         </div>
       </div>
     </div>
   );
 }
-
-const botao =
-  'rounded-lg border border-slate-200 px-2.5 py-1 text-slate-600 transition hover:bg-slate-50';
