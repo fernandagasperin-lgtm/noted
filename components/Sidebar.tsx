@@ -29,6 +29,7 @@ interface Props {
   onRenameProject: (id: string, name: string) => void;
   onDeleteProject: (id: string) => void;
   onToggleFavorite: (id: string, favorite: boolean) => void;
+  onMovePageToProject: (pageId: string, targetProjectId: string) => void;
   onOpenMembers: () => void;
   open: boolean;
   onClose: () => void;
@@ -47,6 +48,7 @@ export default function Sidebar({
   onRenameProject,
   onDeleteProject,
   onToggleFavorite,
+  onMovePageToProject,
   onOpenMembers,
   open,
   onClose,
@@ -157,6 +159,11 @@ export default function Sidebar({
 
   const LinhaPagina = ({ page, aninhada }: { page: Page; aninhada: boolean }) => (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer!.effectAllowed = 'move';
+        e.dataTransfer!.setData('pageId', page.id);
+      }}
       onClick={() => {
         onSelect(page.id);
         onClose();
@@ -236,6 +243,20 @@ export default function Sidebar({
           className="group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1"
           onMouseEnter={(e) => (e.currentTarget.style.background = '#F7F7F5')}
           onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer!.dropEffect = 'move';
+            e.currentTarget.style.background = '#EFEFED';
+          }}
+          onDragLeave={(e) => {
+            e.currentTarget.style.background = '';
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.currentTarget.style.background = '';
+            const pageId = e.dataTransfer!.getData('pageId');
+            if (pageId) onMovePageToProject(pageId, project.id);
+          }}
         >
           <span
             className={'shrink-0 transition-transform ' + (fechado ? '' : 'rotate-90')}

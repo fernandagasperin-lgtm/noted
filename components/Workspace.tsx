@@ -952,6 +952,19 @@ export default function Workspace() {
         onCreateProject={createProject}
         onRenameProject={renameProject}
         onDeleteProject={deleteProject}
+        onMovePageToProject={(pageId, targetProjectId) => {
+          setPages((prev) =>
+            prev.map((p) =>
+              p.id === pageId ? { ...p, projectId: targetProjectId } : p,
+            ),
+          );
+          // Persistir no banco
+          fetch(`/api/pages/${pageId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId: targetProjectId }),
+          });
+        }}
         onOpenMembers={() => setShowMembers(true)}
       />
 
