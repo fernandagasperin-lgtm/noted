@@ -86,12 +86,27 @@ export default function MiniTableDialog({
   const addLinha = () => mudar({ rows: t.rows + 1 });
 
   /** Apagar mexe nas referencias, entao as celulas que somem vao junto. */
-  const tirarColuna = () => {
+  const tirarColuna = (col?: number) => {
     if (t.cols <= 1) return;
-    const ultima = t.cols - 1;
+    const idx = col ?? t.cols - 1;
+    if (idx < 0 || idx >= t.cols) return;
+
     const cells = { ...t.cells };
-    for (let r = 0; r < t.rows; r++) delete cells[refOf(ultima, r)];
-    mudar({ cols: ultima, widths: t.widths.slice(0, ultima), cells });
+    // Apagar celulas da coluna
+    for (let r = 0; r < t.rows; r++) delete cells[refOf(idx, r)];
+    // Deslocar referencias das colunas apos a deletada
+    for (let r = 0; r < t.rows; r++) {
+      for (let c = idx + 1; c < t.cols; c++) {
+        const velho = refOf(c, r);
+        if (velho in cells) {
+          const novo = refOf(c - 1, r);
+          cells[novo] = cells[velho];
+          delete cells[velho];
+        }
+      }
+    }
+    const novas = t.widths.filter((_, i) => i !== idx);
+    mudar({ cols: t.cols - 1, widths: novas, cells });
   };
 
   const tirarLinha = () => {
@@ -146,13 +161,24 @@ export default function MiniTableDialog({
                   >
                     <span>{colName(c)}</span>
                     {canEdit && (
-                      <button
-                        onClick={() => somarColuna(c)}
-                        title="Somar esta coluna na ultima linha"
-                        className="ml-1 rounded px-1 text-[10px] text-slate-300 transition hover:bg-slate-100 hover:text-blue-500"
-                      >
-                        Σ
-                      </button>
+                      <div className="inline-flex gap-0.5 ml-1">
+                        <button
+                          onClick={() => somarColuna(c)}
+                          title="Somar esta coluna"
+                          className="rounded px-1 text-[10px] text-slate-300 transition hover:bg-slate-100 hover:text-blue-500"
+                        >
+                          Σ
+                        </button>
+                        {t.cols > 1 && (
+                          <button
+                            onClick={() => tirarColuna(c)}
+                            title="Apagar esta coluna"
+                            className="rounded px-0.5 text-[10px] text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
                     )}
                   </th>
                 ))}
@@ -160,7 +186,7 @@ export default function MiniTableDialog({
             </thead>
             <tbody>
               {Array.from({ length: t.rows }, (_, r) => (
-                <tr key={r}>
+                <tr key={r} className={!t.header && r === 0 ? 'hidden' : ''}>
                   <td className="pr-1 text-right text-[11px] text-slate-300">{r + 1}</td>
                   {Array.from({ length: t.cols }, (_, c) => {
                     const ref = refOf(c, r);
@@ -219,18 +245,19 @@ export default function MiniTableDialog({
 
           {canEdit && (
             <div className="mt-4 flex flex-wrap items-center gap-2 text-[12.5px]">
-              <button onClick={addColuna} className={botao}>+ Coluna</button>
-              <button onClick={tirarColuna} className={botao}>− Coluna</button>
               <button onClick={addLinha} className={botao}>+ Linha</button>
-              <button onClick={tirarLinha} className={botao}>− Linha</button>
-              <label className="ml-2 flex items-center gap-1.5 text-slate-500">
+              {t.rows > 1 && (
+                <button onClick={() => tirarLinha()} className={botao}>− Linha</button>
+              )}
+              <button onClick={addColuna} className={botao}>+ Coluna</button>
+              <label className="flex items-center gap-1.5 text-slate-500">
                 <input
                   type="checkbox"
                   checked={t.header}
                   onChange={(e) => mudar({ header: e.target.checked })}
                   className="accent-blue-500"
                 />
-                Primeira linha e cabecalho
+                Cabeçalho
               </label>
             </div>
           )}
