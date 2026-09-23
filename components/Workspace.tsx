@@ -1075,6 +1075,13 @@ export default function Workspace() {
                 onRedo={redo}
                 canUndo={histIndex.current > 0}
                 canRedo={histIndex.current < history.current.length - 1}
+                onGroup={agrupar}
+                onUngroup={desagrupar}
+                onAlignLeft={() => align('left')}
+                onAlignCenter={() => align('center')}
+                onAlignRight={() => align('right')}
+                onBringToFront={bringToFront}
+                onSendToBack={sendToBack}
               />
               {canEdit && (
                 <Toolbar

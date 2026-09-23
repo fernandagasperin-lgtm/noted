@@ -159,27 +159,18 @@ export default function MiniTableDialog({
                     style={{ minWidth: t.widths[c] ?? LARGURA_PADRAO }}
                     className="pb-1 text-center text-[11px] font-medium text-slate-400"
                   >
-                    <span>{colName(c)}</span>
-                    {canEdit && (
-                      <div className="inline-flex gap-0.5 ml-1">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>{colName(c)}</span>
+                      {canEdit && t.cols > 1 && (
                         <button
-                          onClick={() => somarColuna(c)}
-                          title="Somar esta coluna"
-                          className="rounded px-1 text-[10px] text-slate-300 transition hover:bg-slate-100 hover:text-blue-500"
+                          onClick={() => tirarColuna(c)}
+                          title="Apagar coluna"
+                          className="rounded px-1.5 py-0.5 text-[11px] text-slate-400 transition hover:bg-red-50 hover:text-red-600 font-medium"
                         >
-                          Σ
+                          ×
                         </button>
-                        {t.cols > 1 && (
-                          <button
-                            onClick={() => tirarColuna(c)}
-                            title="Apagar esta coluna"
-                            className="rounded px-0.5 text-[10px] text-slate-300 transition hover:bg-red-50 hover:text-red-500"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -292,11 +283,7 @@ export default function MiniTableDialog({
           )}
 
           <p className="mt-4 text-[11.5px] leading-relaxed text-slate-400">
-            Comece uma celula com <code className="rounded bg-slate-100 px-1">=</code> para
-            calcular: <code className="rounded bg-slate-100 px-1">=A2*B2</code>,{' '}
-            <code className="rounded bg-slate-100 px-1">=SOMA(C2:C9)</code>,{' '}
-            <code className="rounded bg-slate-100 px-1">=SE(C4&gt;100;&quot;alto&quot;;&quot;ok&quot;)</code>.
-            Tambem valem MEDIA, MIN, MAX, CONT, ARRED, CONCAT.
+            Digite <code className="rounded bg-slate-100 px-1">=</code> para calcular. Ex: <code className="rounded bg-slate-100 px-1">=SOMA(A:A)</code>, <code className="rounded bg-slate-100 px-1">=A2*B2</code>
           </p>
         </div>
       </div>

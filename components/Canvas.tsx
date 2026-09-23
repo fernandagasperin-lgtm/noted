@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import Shape from './Shape';
+import FloatingToolbar from './FloatingToolbar';
 import type { Assistant, BoardElement, Page, Project } from '@/lib/types';
 import { CONNECTABLE, groupOf, boundsOf } from '@/lib/geometry';
 import type { Tool } from './Toolbar';
@@ -38,6 +39,13 @@ interface Props {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  onGroup?: () => void;
+  onUngroup?: () => void;
+  onAlignLeft?: () => void;
+  onAlignCenter?: () => void;
+  onAlignRight?: () => void;
+  onBringToFront?: () => void;
+  onSendToBack?: () => void;
 }
 
 interface Editing {
@@ -346,15 +354,43 @@ export default function Canvas({
     outros: { id: string; x: number; y: number }[];
   } | null>(null);
 
+  /** Retorna elementos que estão dentro de um frame (bounding box). */
+  const elementsInside = (frame: BoardElement): BoardElement[] => {
+    if (frame.type !== 'frame') return [];
+    const frameX = frame.x;
+    const frameY = frame.y;
+    const frameRight = frame.x + frame.width;
+    const frameBottom = frame.y + frame.height;
+
+    return page.elements.filter((el) => {
+      if (el.id === frame.id) return false;
+      // Verificar se el está totalmente dentro do frame (centro + metade das dimensões)
+      const elLeft = el.x - el.width / 2;
+      const elTop = el.y - el.height / 2;
+      const elRight = el.x + el.width / 2;
+      const elBottom = el.y + el.height / 2;
+
+      return elLeft >= frameX && elRight <= frameRight && elTop >= frameY && elBottom <= frameBottom;
+    });
+  };
+
   const iniciarArrastoGrupo = (el: BoardElement) => () => {
     // Zerar antes evita herdar um arrasto anterior que nao chegou ao fim.
     arrasto.current = null;
+
+    // Coletar companheiros de grupo
     const companheiros = groupOf(el, page.elements).filter((g) => g.id !== el.id);
-    if (companheiros.length === 0) return;
+
+    // Se for frame, adicionar elementos dentro dele
+    const filhos = el.type === 'frame' ? elementsInside(el) : [];
+
+    const todosCompanheiros = [...companheiros, ...filhos];
+    if (todosCompanheiros.length === 0) return;
+
     arrasto.current = {
       id: el.id,
       base: { x: el.x, y: el.y },
-      outros: companheiros.map((g) => ({ id: g.id, x: g.x, y: g.y })),
+      outros: todosCompanheiros.map((g) => ({ id: g.id, x: g.x, y: g.y })),
     };
   };
 
@@ -631,6 +667,18 @@ export default function Canvas({
           </svg>
         </button>
       </div>
+
+      <FloatingToolbar
+        stage={stageRef.current}
+        selected={selectedIds}
+        onAgrupar={onGroup ?? (() => {})}
+        onDesagrupar={onUngroup ?? (() => {})}
+        onAlignLeft={onAlignLeft ?? (() => {})}
+        onAlignCenter={onAlignCenter ?? (() => {})}
+        onAlignRight={onAlignRight ?? (() => {})}
+        onBringForward={onBringToFront ?? (() => {})}
+        onSendBackward={onSendToBack ?? (() => {})}
+      />
 
       <div className="absolute right-3 z-10 flex items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg shadow-slate-900/[0.06] backdrop-blur max-md:top-3 md:bottom-4 md:right-4">
         <button onClick={() => applyZoom(view.zoom / 1.2)} title="Diminuir zoom" className={pillButton}>
