@@ -20,6 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
   reference: 'Link de pagina',
   assistant: 'Assistente',
   derivation: 'Resultado',
+  minitable: 'Tabela',
 };
 
 interface Props {
@@ -71,7 +72,9 @@ export default function PropertiesPanel({
   const hasStroke = elements.some((el) =>
     ['rectangle', 'ellipse', 'arrow'].includes(el.type),
   );
-  const hasFont = elements.some((el) => ['sticky', 'text'].includes(el.type));
+  const hasFont = elements.some((el) =>
+    ['sticky', 'text', 'rectangle', 'ellipse'].includes(el.type),
+  );
   const isReference = first.type === 'reference';
   const isCard = first.type === 'assistant' || first.type === 'derivation';
 

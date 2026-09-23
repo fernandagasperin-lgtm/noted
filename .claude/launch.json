@@ -4,7 +4,18 @@
     {
       "name": "quadro",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "quadro-teste",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/dev-test.mjs"
+      ],
       "port": 3000
     }
   ]

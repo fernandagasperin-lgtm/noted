@@ -5,7 +5,10 @@ import { Stage, Layer, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import Shape from './Shape';
 import type { Assistant, BoardElement, Page, Project } from '@/lib/types';
+import { CONNECTABLE } from '@/lib/geometry';
 import type { Tool } from './Toolbar';
+
+export type Lado = 'cima' | 'baixo' | 'esquerda' | 'direita';
 
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 4;
@@ -24,6 +27,9 @@ interface Props {
   onChange: (id: string, patch: Partial<BoardElement>) => void;
   onOpenRef: (pageId: string) => void;
   onOpenCard: (el: BoardElement) => void;
+  /** cria um balao ligado a este, do lado escolhido */
+  onCreateLinked: (sourceId: string, lado: Lado) => void;
+  linked: Record<string, Record<string, number[]>>;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -50,6 +56,8 @@ export default function Canvas({
   onChange,
   onOpenRef,
   onOpenCard,
+  onCreateLinked,
+  linked,
   onUndo,
   onRedo,
   canUndo,
@@ -61,6 +69,24 @@ export default function Canvas({
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [alcas, setAlcas] = useState<
+    { x: number; y: number; width: number; height: number } | null
+  >(null);
+
+  // Tabelinha tem tamanho proprio e seta presa segue os baloes: esticar as
+  // duas so criaria um estado que o proximo render desfaz.
+  const selecaoTemTabela = page.elements.some(
+    (el) =>
+      selectedIds.includes(el.id) &&
+      (el.type === 'minitable' || el.fromId || el.toId),
+  );
+
+  /** Um so elemento selecionado ganha os '+' que puxam o proximo balao. */
+  const alvoAlcas =
+    selectedIds.length === 1
+      ? (page.elements.find((el) => el.id === selectedIds[0]) ?? null)
+      : null;
+  const podeLigar = Boolean(alvoAlcas && CONNECTABLE.has(alvoAlcas.type) && !editing);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -83,6 +109,18 @@ export default function Canvas({
     tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
   }, [selectedIds, page.elements, page.id]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !alvoAlcas || !podeLigar) {
+      setAlcas(null);
+      return;
+    }
+    const node = stage.findOne<Konva.Node>('#' + alvoAlcas.id);
+    setAlcas(node ? node.getClientRect() : null);
+    // A caixa depende da posicao, do zoom e do tamanho do painel, por isso
+    // todos eles entram aqui.
+  }, [alvoAlcas, podeLigar, page.elements, view, size]);
 
   const toCanvasCoords = useCallback((stage: Konva.Stage) => {
     const pointer = stage.getPointerPosition();
@@ -166,7 +204,7 @@ export default function Canvas({
   };
 
   const beginEdit = (el: BoardElement) => {
-    if (el.type === 'assistant' || el.type === 'derivation') {
+    if (el.type === 'assistant' || el.type === 'derivation' || el.type === 'minitable') {
       onOpenCard(el);
       return;
     }
@@ -297,6 +335,8 @@ export default function Canvas({
             <Shape
               key={el.id}
               el={el}
+              elements={page.elements}
+              linked={linked}
               pages={pages}
               projects={projects}
               assistants={assistants}
@@ -310,7 +350,8 @@ export default function Canvas({
           ))}
           <Transformer
             ref={trRef}
-            rotateEnabled
+            resizeEnabled={!selecaoTemTabela}
+            rotateEnabled={!selecaoTemTabela}
             anchorSize={9}
             anchorCornerRadius={4}
             anchorStroke="#3B82F6"
@@ -348,6 +389,31 @@ export default function Canvas({
             lineHeight: 1.35,
           }}
         />
+      )}
+
+      {alcas && alvoAlcas && (
+        <>
+          {(
+            [
+              ['cima', alcas.x + alcas.width / 2, alcas.y - 17],
+              ['baixo', alcas.x + alcas.width / 2, alcas.y + alcas.height + 17],
+              ['esquerda', alcas.x - 17, alcas.y + alcas.height / 2],
+              ['direita', alcas.x + alcas.width + 17, alcas.y + alcas.height / 2],
+            ] as const
+          ).map(([lado, cx, cy]) => (
+            <button
+              key={lado}
+              onClick={() => onCreateLinked(alvoAlcas.id, lado)}
+              title="Ligar um balao deste lado"
+              style={{ left: cx - 11, top: cy - 11 }}
+              className="absolute z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full border border-blue-200 bg-white text-blue-500 shadow-md shadow-slate-900/10 transition hover:bg-blue-500 hover:text-white"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          ))}
+        </>
       )}
 
       <div className="absolute left-3 z-10 flex items-center gap-0.5 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg shadow-slate-900/[0.06] backdrop-blur max-md:bottom-[4.75rem] md:bottom-4 md:left-4">

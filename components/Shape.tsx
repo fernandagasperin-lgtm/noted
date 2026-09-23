@@ -1,9 +1,12 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Rect, Ellipse, Text, Group, Arrow, Line, Image as KonvaImage } from 'react-konva';
 import type Konva from 'konva';
 import type { Assistant, BoardElement, Page, Project } from '@/lib/types';
+import { MINI_ROW_H, connectorPoints } from '@/lib/geometry';
+import { displayValue, evaluateGrid, refOf } from '@/lib/formula';
 
 const INK = '#334155';
 const MUTED = '#94A3B8';
@@ -22,8 +25,42 @@ function useImage(src?: string) {
   return img;
 }
 
+/** O texto que mora dentro de uma forma, centrado como no Miro. */
+function ShapeLabel({
+  el,
+  width,
+  height,
+}: {
+  el: BoardElement;
+  width: number;
+  height: number;
+}) {
+  const pad = 10;
+  return (
+    <Text
+      text={el.content || 'Escreva...'}
+      x={pad}
+      y={pad}
+      width={Math.max(10, width - pad * 2)}
+      height={Math.max(10, height - pad * 2)}
+      align="center"
+      verticalAlign="middle"
+      fontSize={el.style.fontSize}
+      fontFamily="Inter, system-ui, sans-serif"
+      fill={el.content ? INK : '#CBD5E1'}
+      lineHeight={1.3}
+      wrap="word"
+      ellipsis
+      listening={false}
+    />
+  );
+}
+
 interface Props {
   el: BoardElement;
+  elements: BoardElement[];
+  /** somas por pagina e por nome de coluna, para COLUNA() nas tabelinhas */
+  linked?: Record<string, Record<string, number[]>>;
   pages: Page[];
   projects: Project[];
   assistants: Assistant[];
@@ -37,6 +74,8 @@ interface Props {
 
 export default function Shape({
   el,
+  elements,
+  linked,
   pages,
   projects,
   assistants,
@@ -70,34 +109,64 @@ export default function Shape({
   };
 
   switch (el.type) {
+    // Forma e texto andam juntos: no Miro a forma e o suporte da escrita.
     case 'rectangle':
       return (
-        <Rect
-          {...common}
-          {...softShadow}
-          width={el.width}
-          height={el.height}
-          fill={el.style.fill}
-          stroke={el.style.stroke}
-          strokeWidth={el.style.strokeWidth}
-          cornerRadius={10}
-        />
+        <Group {...common} onDblClick={onEditText} onDblTap={onEditText}>
+          <Rect
+            {...softShadow}
+            width={el.width}
+            height={el.height}
+            fill={el.style.fill}
+            stroke={el.style.stroke}
+            strokeWidth={el.style.strokeWidth}
+            cornerRadius={10}
+          />
+          <ShapeLabel el={el} width={el.width} height={el.height} />
+        </Group>
       );
 
     case 'ellipse':
       return (
-        <Ellipse
-          {...common}
-          {...softShadow}
-          radiusX={el.width / 2}
-          radiusY={el.height / 2}
-          fill={el.style.fill}
-          stroke={el.style.stroke}
-          strokeWidth={el.style.strokeWidth}
-        />
+        <Group {...common} onDblClick={onEditText} onDblTap={onEditText}>
+          <Ellipse
+            {...softShadow}
+            radiusX={el.width / 2}
+            radiusY={el.height / 2}
+            fill={el.style.fill}
+            stroke={el.style.stroke}
+            strokeWidth={el.style.strokeWidth}
+          />
+          {/* A elipse e desenhada a partir do centro, o texto a partir do canto. */}
+          <Group x={-el.width / 2} y={-el.height / 2}>
+            <ShapeLabel el={el} width={el.width} height={el.height} />
+          </Group>
+        </Group>
       );
 
-    case 'arrow':
+    case 'arrow': {
+      // Preso a dois elementos, o traco e recalculado a cada render: e assim
+      // que ele acompanha quem se move, como num organograma.
+      const presos = connectorPoints(el, elements);
+      if (presos) {
+        return (
+          <Arrow
+            {...common}
+            x={0}
+            y={0}
+            rotation={0}
+            points={presos}
+            stroke={el.style.stroke}
+            strokeWidth={el.style.strokeWidth}
+            fill={el.style.stroke}
+            pointerLength={11}
+            pointerWidth={11}
+            lineCap="round"
+            hitStrokeWidth={20}
+            draggable={false}
+          />
+        );
+      }
       return (
         <Arrow
           {...common}
@@ -111,6 +180,7 @@ export default function Shape({
           hitStrokeWidth={20}
         />
       );
+    }
 
     case 'image':
       return img ? (
@@ -358,6 +428,116 @@ export default function Shape({
             wrap="word"
             ellipsis
           />
+        </Group>
+      );
+    }
+
+    case 'minitable': {
+      const t = el.table;
+      if (!t) return null;
+      const dados = linked?.[t.linkedPageId ?? ''] ?? null;
+      // Os valores da tabela vinculada chegam por rede. Ate la, COLUNA() nao
+      // existe e daria #NOME: melhor esperar do que acusar um erro que nao ha.
+      const aguardandoVinculo = Boolean(t.linkedPageId) && !dados;
+      const resultados = evaluateGrid(
+        t.cells,
+        dados ? { column: (nome) => dados[nome] ?? [] } : {},
+      );
+
+      const larguras = t.widths.slice(0, t.cols);
+      const total = larguras.reduce((a, b) => a + b, 0);
+      const altura = t.rows * MINI_ROW_H;
+      const xDe = (c: number) => larguras.slice(0, c).reduce((a, b) => a + b, 0);
+
+      const celulas: ReactNode[] = [];
+      for (let r = 0; r < t.rows; r++) {
+        for (let c = 0; c < t.cols; c++) {
+          const ref = refOf(c, r);
+          const pendente = aguardandoVinculo && resultados[ref]?.error === '#NOME';
+          const texto = pendente ? '...' : displayValue(resultados[ref]);
+          const erro = pendente ? null : resultados[ref]?.error;
+          const numero = typeof resultados[ref]?.value === 'number';
+          const cabecalho = t.header && r === 0;
+          celulas.push(
+            <Text
+              key={ref}
+              text={texto}
+              x={xDe(c) + 7}
+              y={r * MINI_ROW_H + 8}
+              width={Math.max(8, larguras[c] - 14)}
+              fontSize={12}
+              fontStyle={cabecalho ? '600' : 'normal'}
+              fontFamily="Inter, system-ui, sans-serif"
+              fill={erro ? '#DC2626' : cabecalho ? '#334155' : numero ? '#1E293B' : '#475569'}
+              align={numero && !cabecalho ? 'right' : 'left'}
+              ellipsis
+              wrap="none"
+              listening={false}
+            />,
+          );
+        }
+      }
+
+      const linhas: ReactNode[] = [];
+      for (let r = 1; r < t.rows; r++) {
+        linhas.push(
+          <Line
+            key={'h' + r}
+            points={[0, r * MINI_ROW_H, total, r * MINI_ROW_H]}
+            stroke="#E8EDF3"
+            strokeWidth={1}
+            listening={false}
+          />,
+        );
+      }
+      for (let c = 1; c < t.cols; c++) {
+        linhas.push(
+          <Line
+            key={'v' + c}
+            points={[xDe(c), 0, xDe(c), altura]}
+            stroke="#E8EDF3"
+            strokeWidth={1}
+            listening={false}
+          />,
+        );
+      }
+
+      return (
+        <Group {...common} onDblClick={onEditText} onDblTap={onEditText}>
+          <Rect
+            width={total}
+            height={altura}
+            fill="#FFFFFF"
+            stroke={isSelected ? '#3B82F6' : '#DCE3EC'}
+            strokeWidth={isSelected ? 2 : 1.5}
+            cornerRadius={8}
+            shadowColor="#0F172A"
+            shadowBlur={isSelected ? 20 : 12}
+            shadowOpacity={isSelected ? 0.12 : 0.07}
+            shadowOffsetY={3}
+          />
+          {t.header && (
+            <Rect
+              width={total}
+              height={MINI_ROW_H}
+              fill="#F4F7FB"
+              cornerRadius={[8, 8, 0, 0]}
+              listening={false}
+            />
+          )}
+          {linhas}
+          {celulas}
+          {t.linkedPageId && (
+            <Text
+              text="vinculada"
+              x={total - 62}
+              y={altura + 5}
+              fontSize={10}
+              fontFamily="Inter, system-ui, sans-serif"
+              fill="#94A3B8"
+              listening={false}
+            />
+          )}
         </Group>
       );
     }

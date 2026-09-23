@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from './Sidebar';
 import Toolbar, { type Tool } from './Toolbar';
+import type { Lado } from './Canvas';
 import PropertiesPanel from './PropertiesPanel';
 import AssistantsPage from './AssistantsPage';
 import TablePage from './TablePage';
@@ -11,10 +12,13 @@ import DatabasePage from './DatabasePage';
 import Icon, { PAGE_COLOR } from './Icon';
 import RunAssistantDialog, { type RunResult } from './RunAssistantDialog';
 import ShareDialog from './ShareDialog';
+import MiniTableDialog from './MiniTableDialog';
 import MembersDialog from './MembersDialog';
+import { boundsOf, miniSize } from '@/lib/geometry';
 import {
   DEFAULT_STYLE,
   type Assistant,
+  type MiniTable,
   type BoardElement,
   type ElementType,
   type Me,
@@ -32,6 +36,25 @@ const Canvas = dynamic(() => import('./Canvas'), {
   ),
 });
 
+/** A tabelinha ja nasce mostrando o que sabe fazer: uma soma. */
+function novaMiniTabela(): MiniTable {
+  return {
+    cols: 3,
+    rows: 4,
+    widths: [120, 70, 90],
+    header: true,
+    cells: {
+      A1: 'Item',
+      B1: 'Qtd',
+      C1: 'Valor',
+      A4: 'Total',
+      C4: '=SOMA(C2:C3)',
+    },
+  };
+}
+
+const MINI_PADRAO = novaMiniTabela();
+
 const DEFAULTS: Record<ElementType, { width: number; height: number; content: string }> = {
   rectangle: { width: 180, height: 110, content: '' },
   ellipse: { width: 140, height: 140, content: '' },
@@ -42,6 +65,7 @@ const DEFAULTS: Record<ElementType, { width: number; height: number; content: st
   reference: { width: 270, height: 88, content: '' },
   assistant: { width: 260, height: 96, content: '' },
   derivation: { width: 270, height: 170, content: '' },
+  minitable: { ...miniSize(MINI_PADRAO), content: '' },
 };
 
 const FILL_BY_TYPE: Partial<Record<ElementType, string>> = {
@@ -73,6 +97,8 @@ export default function Workspace() {
     assistant: Assistant;
     parent?: BoardElement;
   } | null>(null);
+  const [tableTarget, setTableTarget] = useState<string | null>(null);
+  const [linked, setLinked] = useState<Record<string, Record<string, number[]>>>({});
   const [showShare, setShowShare] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [others, setOthers] = useState<string[]>([]);
@@ -196,11 +222,16 @@ export default function Workspace() {
   const createElement = useCallback(
     (type: ElementType, x: number, y: number, extra: Partial<BoardElement> = {}) => {
       const def = DEFAULTS[type];
+      // A elipse e desenhada a partir do centro; as demais, do canto.
+      const canto = type === 'ellipse' ? { x, y } : {
+        x: x - def.width / 2,
+        y: y - def.height / 2,
+      };
       const el: BoardElement = {
         id: crypto.randomUUID(),
         type,
-        x: x - def.width / 2,
-        y: y - def.height / 2,
+        x: canto.x,
+        y: canto.y,
         width: def.width,
         height: def.height,
         rotation: 0,
@@ -211,6 +242,7 @@ export default function Workspace() {
           stroke: STROKE_BY_TYPE[type] ?? DEFAULT_STYLE.stroke,
         },
         ...(type === 'arrow' ? { points: [0, 0, def.width, 0] } : {}),
+        ...(type === 'minitable' ? { table: novaMiniTabela() } : {}),
         ...extra,
       };
       setElements((prev) => [...prev, el]);
@@ -259,9 +291,120 @@ export default function Workspace() {
     [setElements],
   );
 
+
+  /** Onde fica o canto de um elemento cujo centro deve cair em (cx, cy). */
+  const cantoDe = (type: ElementType, w: number, h: number, cx: number, cy: number) =>
+    type === 'ellipse' ? { x: cx, y: cy } : { x: cx - w / 2, y: cy - h / 2 };
+
+  /**
+   * O '+' ao lado de um balao cria o proximo ja ligado por uma seta. A seta
+   * guarda os dois ids, entao continua certa depois que qualquer um se mexe.
+   */
+  const createLinked = useCallback(
+    (sourceId: string, lado: Lado) => {
+      const atual = pagesRef.current.find((p) => p.id === activeId);
+      const fonte = atual?.elements.find((e) => e.id === sourceId);
+      if (!fonte) return;
+
+      const tipo: ElementType = ['rectangle', 'ellipse', 'sticky', 'minitable'].includes(
+        fonte.type,
+      )
+        ? fonte.type
+        : 'rectangle';
+
+      const tabela = tipo === 'minitable' ? novaMiniTabela() : undefined;
+      const tamanho = tabela ? miniSize(tabela) : DEFAULTS[tipo];
+      const b = boundsOf(fonte);
+      const vao = 72;
+
+      const cx =
+        lado === 'esquerda' ? b.cx - b.w / 2 - vao - tamanho.width / 2
+        : lado === 'direita' ? b.cx + b.w / 2 + vao + tamanho.width / 2
+        : b.cx;
+      const cy =
+        lado === 'cima' ? b.cy - b.h / 2 - vao - tamanho.height / 2
+        : lado === 'baixo' ? b.cy + b.h / 2 + vao + tamanho.height / 2
+        : b.cy;
+
+      const canto = cantoDe(tipo, tamanho.width, tamanho.height, cx, cy);
+      const novo: BoardElement = {
+        id: crypto.randomUUID(),
+        type: tipo,
+        x: canto.x,
+        y: canto.y,
+        width: tamanho.width,
+        height: tamanho.height,
+        rotation: 0,
+        content: '',
+        style: {
+          ...DEFAULT_STYLE,
+          fill: FILL_BY_TYPE[tipo] ?? DEFAULT_STYLE.fill,
+          stroke: STROKE_BY_TYPE[tipo] ?? DEFAULT_STYLE.stroke,
+        },
+        ...(tabela ? { table: tabela } : {}),
+      };
+
+      const seta: BoardElement = {
+        id: crypto.randomUUID(),
+        type: 'arrow',
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        rotation: 0,
+        content: '',
+        style: { ...DEFAULT_STYLE, stroke: '#94A3B8', strokeWidth: 2 },
+        points: [0, 0, 0, 0],
+        fromId: sourceId,
+        toId: novo.id,
+      };
+
+      // A seta entra antes para ficar atras dos baloes.
+      setElements((prev) => [seta, ...prev, novo]);
+      setSelectedIds([novo.id]);
+    },
+    [activeId, setElements],
+  );
+
+  /**
+   * Digitar numa celula nao merece um ponto de desfazer por tecla, entao a
+   * tabelinha grava direto e deixa um unico ponto quando o editor fecha.
+   */
+  const tabelaMexida = useRef(false);
+
+  const updateTable = useCallback(
+    (id: string, table: MiniTable) => {
+      tabelaMexida.current = true;
+      setElements(
+        (prev) =>
+          prev.map((el) =>
+            el.id === id ? { ...el, table, ...miniSize(table) } : el,
+          ),
+        false,
+      );
+    },
+    [setElements],
+  );
+
+  const fecharTabela = useCallback(() => {
+    if (tabelaMexida.current) {
+      tabelaMexida.current = false;
+      setElements((prev) => prev, true);
+    }
+    setTableTarget(null);
+  }, [setElements]);
+
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
-    setElements((prev) => prev.filter((el) => !selectedIds.includes(el.id)));
+    // Uma seta presa a um balao apagado nao tem mais o que mostrar.
+    setElements((prev) =>
+      prev.filter(
+        (el) =>
+          !selectedIds.includes(el.id) &&
+          !(el.fromId && selectedIds.includes(el.fromId)) &&
+          !(el.toId && selectedIds.includes(el.toId)),
+      ),
+    );
     setSelectedIds([]);
   }, [selectedIds, setElements]);
 
@@ -298,6 +441,44 @@ export default function Workspace() {
     },
     [activeId],
   );
+
+  const vinculadas = useMemo(() => {
+    const ids = new Set<string>();
+    for (const el of activePage?.elements ?? []) {
+      if (el.type === 'minitable' && el.table?.linkedPageId) {
+        ids.add(el.table.linkedPageId);
+      }
+    }
+    return [...ids].sort().join(',');
+  }, [activePage]);
+
+  useEffect(() => {
+    if (!vinculadas) {
+      setLinked({});
+      return;
+    }
+    let vivo = true;
+    (async () => {
+      const mapa: Record<string, Record<string, number[]>> = {};
+      for (const id of vinculadas.split(',')) {
+        const res = await fetch(`/api/pages/${id}/table`);
+        if (!res.ok) continue;
+        const { columns, rows } = await res.json();
+        const porNome: Record<string, number[]> = {};
+        for (const c of columns) {
+          if (c.type !== 'number') continue;
+          porNome[c.name] = rows
+            .map((r: { values: Record<string, unknown> }) => Number(r.values[c.id]))
+            .filter((n: number) => !Number.isNaN(n));
+        }
+        mapa[id] = porNome;
+      }
+      if (vivo) setLinked(mapa);
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [vinculadas]);
 
   const undo = useCallback(() => {
     if (histIndex.current <= 0) return;
@@ -338,6 +519,10 @@ export default function Workspace() {
   /** Opening a card: assistant cards start a run, result cards branch a new variation. */
   const openCard = useCallback(
     (el: BoardElement) => {
+      if (el.type === 'minitable') {
+        setTableTarget(el.id);
+        return;
+      }
       const assistant = assistants.find((a) => a.id === el.assistantId);
       if (!assistant) {
         alert('O assistente deste card foi removido.');
@@ -696,6 +881,8 @@ export default function Workspace() {
                 onChange={updateElement}
                 onOpenRef={setActiveId}
                 onOpenCard={openCard}
+                onCreateLinked={createLinked}
+                linked={linked}
                 onUndo={undo}
                 onRedo={redo}
                 canUndo={histIndex.current > 0}
@@ -762,6 +949,7 @@ export default function Workspace() {
             sorts={activePage.sorts}
             filters={activePage.filters}
             groupBy={activePage.groupBy}
+            showTitle={activePage.showTitle}
             onView={(patch) => {
               setPages((prev) =>
                 prev.map((p) => (p.id === activePage.id ? { ...p, ...patch } : p)),
@@ -794,6 +982,22 @@ export default function Workspace() {
           />
         )}
       </main>
+
+      {tableTarget &&
+        (() => {
+          const el = activePage?.elements.find((e) => e.id === tableTarget);
+          if (!el?.table) return null;
+          return (
+            <MiniTableDialog
+              table={el.table}
+              pages={pages}
+              canEdit={activePage?.role !== 'viewer'}
+              linked={linked[el.table.linkedPageId ?? ''] ?? null}
+              onSave={(next) => updateTable(el.id, next)}
+              onClose={fecharTabela}
+            />
+          );
+        })()}
 
       {showShare && me && (
         <ShareDialog page={activePage} meId={me.id} onClose={() => setShowShare(false)} />

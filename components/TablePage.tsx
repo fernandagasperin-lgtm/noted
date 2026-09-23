@@ -13,6 +13,7 @@ const TYPE_LABELS: Record<string, string> = {
   reference: 'Link',
   assistant: 'Assistente',
   derivation: 'Resultado',
+  minitable: 'Tabela',
 };
 
 interface Row {

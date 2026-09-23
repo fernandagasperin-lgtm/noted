@@ -60,6 +60,7 @@ function toPage(r: Row): Page {
     sorts: (r.table_sorts ?? []) as Page['sorts'],
     filters: (r.table_filters ?? []) as Page['filters'],
     groupBy: (r.group_by as string) ?? null,
+    showTitle: r.show_title === undefined ? true : Boolean(r.show_title),
     title: r.title as string,
     type: r.type as Page['type'],
     icon: r.icon as string,
@@ -211,6 +212,8 @@ export async function updatePage(
            table_filters = COALESCE(${patch.filters ? JSON.stringify(patch.filters) : null}::jsonb, table_filters),
            group_by = CASE WHEN ${'groupBy' in patch}::boolean
                            THEN ${patch.groupBy ?? null}::text ELSE group_by END,
+           show_title = CASE WHEN ${'showTitle' in patch}::boolean
+                             THEN ${patch.showTitle ?? true}::boolean ELSE show_title END,
            elements = COALESCE(${patch.elements ? JSON.stringify(patch.elements) : null}::jsonb, elements),
            updated_at = now()
      WHERE id = ${id}

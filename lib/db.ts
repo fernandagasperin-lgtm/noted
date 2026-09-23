@@ -34,7 +34,9 @@ function getRunner(): QueryRunner {
     pool = new Pool({
       connectionString,
       ssl: isLocal ? false : { rejectUnauthorized: false },
-      max: 8,
+      // O PGlite usado nos testes locais atende uma conexao so; em producao
+      // a variavel nao existe e o limite volta a ser o normal.
+      max: Number(process.env.PG_POOL_MAX ?? 8),
       idleTimeoutMillis: 30_000,
     });
   }
@@ -174,6 +176,7 @@ export function ensureSchema(): Promise<void> {
     await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS table_sorts JSONB NOT NULL DEFAULT '[]'::jsonb`;
     await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS table_filters JSONB NOT NULL DEFAULT '[]'::jsonb`;
     await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS group_by TEXT`;
+    await sql`ALTER TABLE pages ADD COLUMN IF NOT EXISTS show_title BOOLEAN NOT NULL DEFAULT true`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS page_favorites (

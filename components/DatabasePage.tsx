@@ -34,10 +34,12 @@ interface Props {
   sorts: TableSort[];
   filters: TableFilter[];
   groupBy: string | null;
+  showTitle: boolean;
   onView: (patch: {
     sorts?: TableSort[];
     filters?: TableFilter[];
     groupBy?: string | null;
+    showTitle?: boolean;
   }) => void;
 }
 
@@ -49,6 +51,7 @@ export default function DatabasePage({
   sorts,
   filters,
   groupBy,
+  showTitle,
   onView,
 }: Props) {
   const [painel, setPainel] = useState<'sort' | 'filter' | 'group' | null>(null);
@@ -162,6 +165,8 @@ export default function DatabasePage({
    */
   const arrastando = useRef<{ inicioX: number; inicioLargura: number } | null>(null);
   const [larguraTitulo, setLarguraTitulo] = useState(titleWidth);
+  /** Sem a coluna Nome sobra so uma faixa estreita para abrir e excluir. */
+  const GUIA = 58;
 
   useEffect(() => setLarguraTitulo(titleWidth), [titleWidth]);
 
@@ -246,7 +251,7 @@ export default function DatabasePage({
 
   /** A coluna de titulo nao vive em db_columns, mas serve de criterio. */
   const criterios = [
-    { id: 'title', nome: 'Nome', type: 'text' as ColumnType },
+    ...(showTitle ? [{ id: 'title', nome: 'Nome', type: 'text' as ColumnType }] : []),
     ...columns.map((c) => ({ id: c.id, nome: c.name, type: c.type })),
   ];
   const tipoDe = (id: string) => criterios.find((c) => c.id === id)?.type ?? 'text';
@@ -297,32 +302,39 @@ export default function DatabasePage({
     );
   }
 
+  const larguraGuia = showTitle ? larguraTitulo : GUIA;
+
   const cellBase =
     'border-b border-r border-[#E9E9E7] px-2 py-1.5 text-[14px] text-[#37352F] align-top';
 
   const renderLinha = (row: DbRow) => (
             <tr key={row.id} className="group">
         <td
-          style={{ width: larguraTitulo, minWidth: larguraTitulo }}
+          style={{ width: larguraGuia, minWidth: larguraGuia }}
           className={'sticky left-0 z-10 bg-white ' + cellBase}
         >
           <div className="flex items-center gap-1.5">
-            <span className="shrink-0">
-              <Icon name="text" size={13} color="#C7C6C4" />
-            </span>
-            <input
-              value={row.title}
-              readOnly={!canEdit}
-              onChange={(e) => saveRowSoon(row.id, { title: e.target.value })}
-              placeholder="Sem titulo"
-              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[#C7C6C4]"
-            />
+            {showTitle && (
+              <>
+                <span className="shrink-0">
+                  <Icon name="text" size={13} color="#C7C6C4" />
+                </span>
+                <input
+                  value={row.title}
+                  readOnly={!canEdit}
+                  onChange={(e) => saveRowSoon(row.id, { title: e.target.value })}
+                  placeholder="Sem titulo"
+                  className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[#C7C6C4]"
+                />
+              </>
+            )}
             <button
               onClick={() => setOpenRow(row)}
+              title="Abrir como pagina"
               className="flex shrink-0 items-center gap-1 rounded border border-[#E9E9E7] px-1.5 py-0.5 text-[11px] text-[#787774] opacity-0 transition hover:bg-[#F7F7F5] group-hover:opacity-100"
             >
               <Icon name="open" size={11} />
-              ABRIR
+              {showTitle && 'ABRIR'}
             </button>
             {canEdit && (
               <button
@@ -404,6 +416,29 @@ export default function DatabasePage({
             className={botaoBarra(Boolean(groupBy))}
           >
             Agrupar
+          </button>
+          <button
+            onClick={() =>
+              onView(
+                showTitle
+                  ? {
+                      showTitle: false,
+                      // Escondida, a coluna Nome nao pode continuar ordenando
+                      // nem filtrando: o criterio some junto com ela.
+                      sorts: sorts.filter((o) => o.columnId !== 'title'),
+                      filters: filters.filter((f) => f.columnId !== 'title'),
+                    }
+                  : { showTitle: true },
+              )
+            }
+            title={
+              showTitle
+                ? 'Esconder a coluna Nome; a tabela passa a viver so das suas colunas'
+                : 'Mostrar a coluna Nome, que abre cada linha como pagina'
+            }
+            className={botaoBarra(!showTitle)}
+          >
+            {showTitle ? 'Esconder Nome' : 'Mostrar Nome'}
           </button>
 
           <span className="ml-auto text-[12px] text-[#9B9A97]">
@@ -584,28 +619,32 @@ export default function DatabasePage({
       <table
         style={{
           tableLayout: 'fixed',
-          width: larguraTitulo + columns.reduce((t, c) => t + c.width, 0) + 160,
+          width: larguraGuia + columns.reduce((t, c) => t + c.width, 0) + 160,
         }}
         className="border-collapse"
       >
         <thead>
           <tr>
             <th
-              style={{ width: larguraTitulo, minWidth: larguraTitulo }}
+              style={{ width: larguraGuia, minWidth: larguraGuia }}
               className={
                 'sticky left-0 z-10 border-b border-r border-[#E9E9E7] ' +
                 'relative bg-white px-2 py-1.5 text-left text-[13px] font-normal text-[#9B9A97]'
               }
             >
-              <span className="mr-1.5 inline-block align-[-2px]">
-                <Icon name="title" size={13} color="#9B9A97" />
-              </span>
-              Nome
-              <Alca
-                onStart={(e) =>
-                  iniciarArrasto(e, larguraTitulo, setLarguraTitulo, onTitleWidth)
-                }
-              />
+              {showTitle && (
+                <>
+                  <span className="mr-1.5 inline-block align-[-2px]">
+                    <Icon name="title" size={13} color="#9B9A97" />
+                  </span>
+                  Nome
+                  <Alca
+                    onStart={(e) =>
+                      iniciarArrasto(e, larguraTitulo, setLarguraTitulo, onTitleWidth)
+                    }
+                  />
+                </>
+              )}
             </th>
 
             {columns.map((c) => (

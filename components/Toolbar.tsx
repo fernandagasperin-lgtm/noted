@@ -10,7 +10,8 @@ export type Tool =
   | 'text'
   | 'arrow'
   | 'reference'
-  | 'assistant';
+  | 'assistant'
+  | 'minitable';
 
 const TOOLS: { id: Tool; label: string; hint: string; icon: React.ReactNode }[] = [
   {
@@ -77,6 +78,17 @@ const TOOLS: { id: Tool; label: string; hint: string; icon: React.ReactNode }[] 
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    ),
+  },
+  {
+    id: 'minitable',
+    label: 'Tabela',
+    hint: 'B',
+    icon: (
+      <g fill="none" stroke="currentColor" strokeWidth="1.7">
+        <rect x="4" y="5" width="16" height="14" rx="2" />
+        <path d="M4 10h16M10 10v9M4 14.5h16" strokeLinecap="round" />
+      </g>
     ),
   },
   {

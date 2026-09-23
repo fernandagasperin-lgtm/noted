@@ -47,6 +47,16 @@ import { buildDerivationTitle, fillTemplate, type Assistant, type Me } from '../
 import { hashPassword, verifyPassword } from '../lib/password';
 import { createSessionToken, readSession } from '../lib/session';
 import { applyFilters, applySorts, opsFor, type TableFilter } from '../lib/table';
+import {
+  colIndex,
+  colName,
+  displayValue,
+  evaluateGrid,
+  expandRange,
+  parseRef,
+} from '../lib/formula';
+import { borderPoint, boundsOf, connectorPoints, miniSize } from '../lib/geometry';
+import type { BoardElement } from '../lib/types';
 import type { DbColumn, DbRow } from '../lib/types';
 
 let passed = 0;
@@ -468,6 +478,93 @@ async function main() {
   const finalWs = await readWorkspace(me(alice.id));
   check('projeto some', !finalWs.projects.some((p) => p.id === projB.id));
   check('e as paginas dele tambem', !finalWs.pages.some((p) => p.projectId === projB.id));
+
+
+  section('formulas');
+  const calc = (cells: Record<string, string>, extra = {}) => {
+    const r = evaluateGrid(cells, extra);
+    const out: Record<string, string> = {};
+    for (const k of Object.keys(r)) out[k] = displayValue(r[k]);
+    return out;
+  };
+  check('A depois de Z e AA', colName(26) === 'AA' && colIndex('AA') === 26);
+  check('B3 e coluna 1, linha 2', JSON.stringify(parseRef('B3')) === '{"col":1,"row":2}');
+  check('3B nao e referencia', parseRef('3B') === null);
+  check('faixa cobre o retangulo', expandRange('A1', 'B2').join() === 'A1,B1,A2,B2');
+  check('soma de celulas', calc({ A1: '2', A2: '3', A3: '=A1+A2' }).A3 === '5');
+  check('soma de faixa', calc({ A1: '2', A2: '3', A3: '5', A4: '=SOMA(A1:A3)' }).A4 === '10');
+  check('precedencia', calc({ A1: '=2+3*4' }).A1 === '14');
+  check('parenteses mudam a ordem', calc({ A1: '=(2+3)*4' }).A1 === '20');
+  check('SE escolhe o ramo', calc({ A1: '10', B1: '=SE(A1>5;"alto";"baixo")' }).B1 === 'alto');
+  check('texto nao entra na soma', calc({ A1: 'oi', A2: '3', A3: '=SOMA(A1:A2)' }).A3 === '3');
+  check('nem e contado como numero', calc({ A1: 'oi', A2: '3', A3: '=CONT(A1:A2)' }).A3 === '1');
+  check('divisao por zero avisa', calc({ A1: '=1/0' }).A1 === '#DIV/0');
+  check('funcao desconhecida avisa', calc({ A1: '=FOO(1)' }).A1 === '#NOME');
+  check('sintaxe quebrada avisa', calc({ A1: '=2+' }).A1 === '#SINTAXE');
+  check('ciclo direto e barrado', calc({ A1: '=A1+1' }).A1 === '#CICLO');
+  check('ciclo indireto e barrado', calc({ A1: '=B1', B1: '=A1' }).A1 === '#CICLO');
+  check('ordem de escrita nao importa', calc({ A3: '=A2+1', A2: '=A1*3', A1: '2' }).A3 === '7');
+  check('erro se propaga pela cadeia', calc({ A1: '=1/0', A2: '=A1+1' }).A2 === '#DIV/0');
+  check('valor com moeda vira numero', calc({ A1: 'R$ 1.234,50', A2: '=A1*2' }).A2 === '2469');
+  check(
+    'COLUNA soma a tabela vinculada',
+    calc({ A1: '=COLUNA("Valor")' }, { column: (n: string) => (n === 'Valor' ? [10, 20] : []) })
+      .A1 === '30',
+  );
+  check('COLUNA sem vinculo avisa', calc({ A1: '=COLUNA("Valor")' }).A1 === '#NOME');
+  check('funcao em minuscula vale', calc({ A1: '2', A2: '=soma(A1;3)' }).A2 === '5');
+  check('referencia em minuscula vale', calc({ A1: '7', A2: '=a1+1' }).A2 === '8');
+
+  section('tabelinha e conectores');
+  const mini = { cols: 2, rows: 3, widths: [100, 60], header: true, cells: {} };
+  check('tamanho sai da grade', JSON.stringify(miniSize(mini)) === '{"width":160,"height":90}');
+
+  const caixa = (over: Partial<BoardElement>): BoardElement => ({
+    id: 'x',
+    type: 'rectangle',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    rotation: 0,
+    content: '',
+    style: { fill: '#fff', stroke: '#000', strokeWidth: 1, fontSize: 14, opacity: 1 },
+    ...over,
+  });
+  const caixaA = caixa({ id: 'a', x: 0, y: 0 });
+  const caixaB = caixa({ id: 'b', x: 300, y: 0 });
+  check(
+    'retangulo mede pelo canto',
+    JSON.stringify(boundsOf(caixaA)) === '{"cx":50,"cy":50,"w":100,"h":100}',
+  );
+  const elipse = caixa({ id: 'e', type: 'ellipse', x: 50, y: 50 });
+  check(
+    'elipse mede pelo centro',
+    JSON.stringify(boundsOf(elipse)) === '{"cx":50,"cy":50,"w":100,"h":100}',
+  );
+  const naBorda = borderPoint(caixaA, 500, 50);
+  check('o ponto encosta na borda', naBorda.x === 100 && naBorda.y === 50, JSON.stringify(naBorda));
+
+  const seta = caixa({ id: 's', type: 'arrow', fromId: 'a', toId: 'b', width: 0, height: 0 });
+  const pts = connectorPoints(seta, [caixaA, caixaB, seta]);
+  check('conector vai de borda a borda', JSON.stringify(pts) === '[100,50,300,50]', JSON.stringify(pts));
+  const pts2 = connectorPoints(seta, [caixaA, { ...caixaB, y: 400 }, seta]);
+  check('conector acompanha quem se move', JSON.stringify(pts2) !== JSON.stringify(pts));
+  check('seta solta nao vira conector', connectorPoints(caixa({ type: 'arrow' }), []) === null);
+  check(
+    'ponta orfa nao derruba o desenho',
+    connectorPoints(caixa({ type: 'arrow', fromId: 'a', toId: 'sumiu' }), [caixaA]) !== null,
+  );
+
+  section('coluna Nome opcional');
+  const semNome = (await createPage(alice.id, projA.id, 'Sem nome', 'database'))!;
+  check('a coluna Nome comeca visivel', semNome.showTitle === true);
+  const escondida = await updatePage(semNome.id, { showTitle: false }, 'owner');
+  check('da para esconder', escondida?.showTitle === false);
+  const renomeada = await updatePage(semNome.id, { title: 'Custos' }, 'owner');
+  check('renomear nao traz a coluna de volta', renomeada?.showTitle === false);
+  const devolta = await updatePage(semNome.id, { showTitle: true }, 'owner');
+  check('e da para trazer de volta', devolta?.showTitle === true);
 
   console.log(`\n${passed} passaram, ${failed} falharam.\n`);
   await pg.close();

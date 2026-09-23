@@ -7,7 +7,8 @@ export type ElementType =
   | 'arrow'
   | 'reference'
   | 'assistant'
-  | 'derivation';
+  | 'derivation'
+  | 'minitable';
 
 export interface Style {
   fill: string;
@@ -15,6 +16,20 @@ export interface Style {
   strokeWidth: number;
   fontSize: number;
   opacity: number;
+}
+
+/** A tabelinha que vive dentro de um balao do mural. */
+export interface MiniTable {
+  cols: number;
+  rows: number;
+  /** largura de cada coluna, em pixels */
+  widths: number[];
+  /** a primeira linha e cabecalho */
+  header: boolean;
+  /** valores por referencia de planilha: A1, B2... '=' comeca uma formula */
+  cells: Record<string, string>;
+  /** quando preenchido, COLUNA("Nome") le dessa tabela grande */
+  linkedPageId?: string;
 }
 
 export interface BoardElement {
@@ -33,6 +48,13 @@ export interface BoardElement {
   refPageId?: string;
   /** image only: url under /uploads */
   src?: string;
+
+  /** arrow only: pontas presas a outros elementos, para organogramas */
+  fromId?: string;
+  toId?: string;
+
+  /** minitable only */
+  table?: MiniTable;
 
   /** assistant and derivation: which assistant this card belongs to */
   assistantId?: string;
@@ -216,6 +238,8 @@ export interface Page {
   filters: TableFilter[];
   /** tabelas: coluna pela qual as linhas sao agrupadas */
   groupBy: string | null;
+  /** tabelas: a coluna Nome e opcional, ao contrario do Notion */
+  showTitle: boolean;
   title: string;
   type: PageType;
   icon: string;
