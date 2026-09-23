@@ -5,7 +5,7 @@ import { Stage, Layer, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import Shape from './Shape';
 import type { Assistant, BoardElement, Page, Project } from '@/lib/types';
-import { CONNECTABLE, groupOf } from '@/lib/geometry';
+import { CONNECTABLE, groupOf, boundsOf } from '@/lib/geometry';
 import type { Tool } from './Toolbar';
 
 export type Lado = 'cima' | 'baixo' | 'esquerda' | 'direita';
@@ -85,6 +85,13 @@ export default function Canvas({
     de: { x: number; y: number };
     para: { x: number; y: number };
     alvo: string | null;
+  } | null>(null);
+  /** retangulo de selecao enquanto se arrasta no palco vazio */
+  const [boxSel, setBoxSel] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
   } | null>(null);
 
   // Tabelinha tem tamanho proprio e seta presa segue os baloes: esticar as
@@ -214,7 +221,42 @@ export default function Canvas({
       setTool('select');
       return;
     }
-    if (e.target === stage) setSelectedIds([]);
+    if (e.target === stage) {
+      // Comecou no vazio: inicio do box selection.
+      const pos = stage.getRelativePointerPosition();
+      if (pos) setBoxSel({ x: pos.x, y: pos.y, width: 0, height: 0 });
+      setSelectedIds([]);
+    }
+  };
+
+  const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!boxSel || tool !== 'select') return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const pos = stage.getRelativePointerPosition();
+    if (!pos) return;
+    setBoxSel({
+      x: Math.min(boxSel.x, pos.x),
+      y: Math.min(boxSel.y, pos.y),
+      width: Math.abs(pos.x - boxSel.x),
+      height: Math.abs(pos.y - boxSel.y),
+    });
+  };
+
+  const handleStageMouseUp = () => {
+    if (!boxSel) return;
+    // Quem esta dentro do box selection entra na selecao.
+    const dentro = page.elements.filter((el) => {
+      const b = boundsOf(el);
+      return (
+        b.cx - b.w / 2 >= boxSel.x &&
+        b.cx + b.w / 2 <= boxSel.x + boxSel.width &&
+        b.cy - b.h / 2 >= boxSel.y &&
+        b.cy + b.h / 2 <= boxSel.y + boxSel.height
+      );
+    });
+    if (dentro.length > 0) setSelectedIds(dentro.map((el) => el.id));
+    setBoxSel(null);
   };
 
   const beginEdit = (el: BoardElement) => {
@@ -446,9 +488,11 @@ export default function Canvas({
         ref={stageRef}
         width={size.width}
         height={size.height}
-        draggable={tool === 'select' && !editing}
+        draggable={tool === 'select' && !editing && !boxSel}
         onWheel={handleWheel}
         onMouseDown={handleStageMouseDown}
+        onMouseMove={handleStageMouseMove}
+        onMouseUp={handleStageMouseUp}
         onDragMove={(e) => e.target === stageRef.current && syncView(e.target as Konva.Stage)}
         onDragEnd={(e) => e.target === stageRef.current && syncView(e.target as Konva.Stage)}
         onTouchMove={handleTouchMove}
@@ -532,6 +576,21 @@ export default function Canvas({
           {ligando.alvo && (
             <circle cx={ligando.para.x} cy={ligando.para.y} r={5} fill="#2383E2" />
           )}
+        </svg>
+      )}
+
+      {boxSel && (
+        <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full">
+          <rect
+            x={boxSel.x}
+            y={boxSel.y}
+            width={boxSel.width}
+            height={boxSel.height}
+            fill="rgba(35, 131, 226, 0.1)"
+            stroke="#2383E2"
+            strokeWidth="1"
+            strokeDasharray="4 2"
+          />
         </svg>
       )}
 
