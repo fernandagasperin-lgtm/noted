@@ -69,8 +69,15 @@ export default function Sidebar({
     [pages, termo],
   );
 
-  /** Meus projetos de um lado; o que os outros me deram acesso, do outro. */
-  const meusProjetos = useMemo(() => projects.filter((p) => p.mine), [projects]);
+  /** Agrupar: meus privados, meus compartilhados, dos outros. */
+  const meusPrivados = useMemo(
+    () => projects.filter((p) => p.mine && p.isPrivate),
+    [projects],
+  );
+  const meusCompartilhados = useMemo(
+    () => projects.filter((p) => p.mine && !p.isPrivate),
+    [projects],
+  );
   const projetosDeOutros = useMemo(() => projects.filter((p) => !p.mine), [projects]);
 
   const paginasDe = (projectId: string, minhas: boolean) =>
@@ -82,11 +89,9 @@ export default function Sidebar({
   const projetoVisivel = (project: Project, minhas: boolean) =>
     !termo || casa(project.name) || paginasDe(project.id, minhas).length > 0;
 
-  const privadosVisiveis = meusProjetos.filter((p) => projetoVisivel(p, true));
-  const compartilhadosVisiveis = [
-    ...projetosDeOutros.filter((p) => projetoVisivel(p, false)),
-    ...meusProjetos.filter((p) => paginasDe(p.id, false).length > 0 && projetoVisivel(p, false)),
-  ];
+  const meusPrivadosVisiveis = meusPrivados.filter((p) => projetoVisivel(p, true));
+  const meusCompartilhadosVisiveis = meusCompartilhados.filter((p) => projetoVisivel(p, true));
+  const projetosDeOutrosVisiveis = projetosDeOutros.filter((p) => projetoVisivel(p, false));
 
   const comecarRename = (tipo: 'page' | 'project', id: string, atual: string) => {
     setRenomeando({ tipo, id });
@@ -305,6 +310,22 @@ export default function Sidebar({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        setMenuDe(null);
+                        fetch(`/api/projects/${project.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ isPrivate: !project.isPrivate }),
+                        });
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] hover:bg-[#F1F1EF]"
+                      style={{ color: INK }}
+                    >
+                      <Icon name={project.isPrivate ? 'lock' : 'lockOpen'} size={15} color={MUTED} />
+                      {project.isPrivate ? 'Tornar publico' : 'Tornar privado'}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         comecarRename('project', project.id, project.name);
                       }}
                       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] hover:bg-[#F1F1EF]"
@@ -407,10 +428,19 @@ export default function Sidebar({
             </>
           )}
 
-          {privadosVisiveis.length > 0 && (
+          {meusPrivadosVisiveis.length > 0 && (
             <>
-              <Cabecalho texto="Privado" />
-              {privadosVisiveis.map((p) => (
+              <Cabecalho texto="Meus Privados" />
+              {meusPrivadosVisiveis.map((p) => (
+                <BlocoProjeto key={p.id} project={p} minhas />
+              ))}
+            </>
+          )}
+
+          {meusCompartilhadosVisiveis.length > 0 && (
+            <>
+              <Cabecalho texto="Meus Compartilhados" />
+              {meusCompartilhadosVisiveis.map((p) => (
                 <BlocoProjeto key={p.id} project={p} minhas />
               ))}
             </>
@@ -426,10 +456,10 @@ export default function Sidebar({
             </button>
           )}
 
-          {compartilhadosVisiveis.length > 0 && (
+          {projetosDeOutrosVisiveis.length > 0 && (
             <>
               <Cabecalho texto="Compartilhado comigo" />
-              {compartilhadosVisiveis.map((p) => (
+              {projetosDeOutrosVisiveis.map((p) => (
                 <BlocoProjeto key={'sh-' + p.id} project={p} minhas={false} />
               ))}
             </>
@@ -437,8 +467,9 @@ export default function Sidebar({
 
           {termo &&
             favoritas.length === 0 &&
-            privadosVisiveis.length === 0 &&
-            compartilhadosVisiveis.length === 0 && (
+            meusPrivadosVisiveis.length === 0 &&
+            meusCompartilhadosVisiveis.length === 0 &&
+            projetosDeOutrosVisiveis.length === 0 && (
               <p className="px-2 py-6 text-center text-[13px]" style={{ color: MUTED }}>
                 Nada encontrado.
               </p>

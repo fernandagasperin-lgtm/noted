@@ -32,6 +32,7 @@ function toProject(r: Row, userId: string): Project {
     color: r.color as string,
     ownerId: (r.owner_id as string) ?? null,
     mine: r.owner_id === userId,
+    isPrivate: r.is_private as boolean,
     createdAt: iso(r.created_at),
   };
 }
@@ -158,7 +159,8 @@ export async function updateProject(
     UPDATE projects
        SET name = COALESCE(${patch.name ?? null}, name),
            icon = COALESCE(${patch.icon ?? null}, icon),
-           color = COALESCE(${patch.color ?? null}, color)
+           color = COALESCE(${patch.color ?? null}, color),
+           is_private = COALESCE(${patch.isPrivate ?? null}, is_private)
      WHERE id = ${id}
     RETURNING *`;
   return row ? toProject(row, userId) : null;

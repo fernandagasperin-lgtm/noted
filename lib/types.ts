@@ -206,6 +206,8 @@ export interface Project {
   ownerId: string | null;
   /** true when the signed-in user owns it */
   mine: boolean;
+  /** true: only the owner can see; false: visible to people with access to pages */
+  isPrivate?: boolean;
   createdAt: string;
 }
 
