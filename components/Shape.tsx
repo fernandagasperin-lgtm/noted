@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { Rect, Ellipse, Text, Group, Arrow, Line, Image as KonvaImage } from 'react-konva';
 import type Konva from 'konva';
 import type { Assistant, BoardElement, Page, Project } from '@/lib/types';
-import { MINI_ROW_H, connectorPoints } from '@/lib/geometry';
+import { MINI_ROW_H, connectorPoints, curveThrough } from '@/lib/geometry';
 import { displayValue, evaluateGrid, refOf } from '@/lib/formula';
 
 const INK = '#334155';
@@ -67,6 +67,8 @@ interface Props {
   isSelected: boolean;
   draggable: boolean;
   onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void;
+  onDragStart?: () => void;
+  onDragMove?: () => void;
   onChange: (patch: Partial<BoardElement>) => void;
   onEditText: () => void;
   onOpenRef: (pageId: string) => void;
@@ -82,6 +84,8 @@ export default function Shape({
   isSelected,
   draggable,
   onSelect,
+  onDragStart,
+  onDragMove,
   onChange,
   onEditText,
   onOpenRef,
@@ -97,6 +101,8 @@ export default function Shape({
     opacity: el.style.opacity,
     draggable,
     onMouseDown: onSelect,
+    onDragStart,
+    onDragMove,
     onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) =>
       onChange({ x: e.target.x(), y: e.target.y() }),
   };
@@ -155,12 +161,13 @@ export default function Shape({
             x={0}
             y={0}
             rotation={0}
-            points={presos}
+            points={curveThrough(presos)}
+            bezier
             stroke={el.style.stroke}
             strokeWidth={el.style.strokeWidth}
             fill={el.style.stroke}
-            pointerLength={11}
-            pointerWidth={11}
+            pointerLength={8}
+            pointerWidth={7}
             lineCap="round"
             hitStrokeWidth={20}
             draggable={false}

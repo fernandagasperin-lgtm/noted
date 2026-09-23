@@ -353,7 +353,7 @@ export default function Workspace() {
         height: 0,
         rotation: 0,
         content: '',
-        style: { ...DEFAULT_STYLE, stroke: '#94A3B8', strokeWidth: 2 },
+        style: { ...DEFAULT_STYLE, stroke: '#A9B4C4', strokeWidth: 1.5 },
         points: [0, 0, 0, 0],
         fromId: sourceId,
         toId: novo.id,
@@ -394,6 +394,83 @@ export default function Workspace() {
     setTableTarget(null);
   }, [setElements]);
 
+
+  /** Uma seta entre dois elementos que ja existem, sem criar nada novo. */
+  const connectElements = useCallback(
+    (fromId: string, toId: string) => {
+      const atual = pagesRef.current.find((p) => p.id === activeId);
+      const elementos = atual?.elements ?? [];
+      if (!elementos.some((e) => e.id === fromId)) return;
+      if (!elementos.some((e) => e.id === toId)) return;
+      // Ligar de novo o mesmo par so empilharia tracos por cima do outro.
+      const repetida = elementos.some(
+        (e) =>
+          e.type === 'arrow' &&
+          ((e.fromId === fromId && e.toId === toId) ||
+            (e.fromId === toId && e.toId === fromId)),
+      );
+      if (repetida) return;
+
+      const seta: BoardElement = {
+        id: crypto.randomUUID(),
+        type: 'arrow',
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        rotation: 0,
+        content: '',
+        style: { ...DEFAULT_STYLE, stroke: '#A9B4C4', strokeWidth: 1.5 },
+        points: [0, 0, 0, 0],
+        fromId,
+        toId,
+      };
+      setElements((prev) => [seta, ...prev]);
+    },
+    [activeId, setElements],
+  );
+
+  /** Move varios de uma vez, com um unico ponto de desfazer. */
+  const moveMany = useCallback(
+    (movimentos: { id: string; x: number; y: number }[]) => {
+      const porId = new Map(movimentos.map((m) => [m.id, m]));
+      setElements((prev) =>
+        prev.map((el) => {
+          const m = porId.get(el.id);
+          return m ? { ...el, x: m.x, y: m.y } : el;
+        }),
+      );
+    },
+    [setElements],
+  );
+
+  /**
+   * Agrupar nao cria pai nem filho: os escolhidos passam a andar juntos, e
+   * mover qualquer um move todos. As setas ficam de fora porque ja seguem
+   * as pontas sozinhas.
+   */
+  const agrupar = useCallback(() => {
+    const atual = pagesRef.current.find((p) => p.id === activeId);
+    const alvos = (atual?.elements ?? []).filter(
+      (el) => selectedIds.includes(el.id) && el.type !== 'arrow',
+    );
+    if (alvos.length < 2) return;
+    // Entrar num grupo que ja existe e mais util do que criar outro por cima.
+    const existente = alvos.find((el) => el.groupId)?.groupId;
+    const grupo = existente ?? crypto.randomUUID();
+    const ids = new Set(alvos.map((el) => el.id));
+    setElements((prev) =>
+      prev.map((el) => (ids.has(el.id) ? { ...el, groupId: grupo } : el)),
+    );
+  }, [activeId, selectedIds, setElements]);
+
+  const desagrupar = useCallback(() => {
+    const ids = new Set(selectedIds);
+    setElements((prev) =>
+      prev.map((el) => (ids.has(el.id) ? { ...el, groupId: undefined } : el)),
+    );
+  }, [selectedIds, setElements]);
+
   const deleteSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
     // Uma seta presa a um balao apagado nao tem mais o que mostrar.
@@ -411,9 +488,18 @@ export default function Workspace() {
   const duplicateSelected = useCallback(() => {
     if (selectedIds.length === 0) return;
     const source = pagesRef.current.find((p) => p.id === activeId)?.elements ?? [];
+    // As copias formam um grupo proprio: herdar o grupo do original faria a
+    // copia arrastar o original junto.
+    const grupoNovo = crypto.randomUUID();
     const copies = source
       .filter((el) => selectedIds.includes(el.id))
-      .map((el) => ({ ...el, id: crypto.randomUUID(), x: el.x + 24, y: el.y + 24 }));
+      .map((el) => ({
+        ...el,
+        id: crypto.randomUUID(),
+        x: el.x + 24,
+        y: el.y + 24,
+        groupId: el.groupId ? grupoNovo : undefined,
+      }));
     if (copies.length === 0) return;
     setElements((prev) => [...prev, ...copies]);
     setSelectedIds(copies.map((c) => c.id));
@@ -882,6 +968,8 @@ export default function Workspace() {
                 onOpenRef={setActiveId}
                 onOpenCard={openCard}
                 onCreateLinked={createLinked}
+                onConnect={connectElements}
+                onMoveMany={moveMany}
                 linked={linked}
                 onUndo={undo}
                 onRedo={redo}
@@ -909,6 +997,8 @@ export default function Workspace() {
               onDuplicate={duplicateSelected}
               onBringToFront={() => reorder(true)}
               onSendToBack={() => reorder(false)}
+              onGroup={agrupar}
+              onUngroup={desagrupar}
               onDeselect={() => setSelectedIds([])}
             />
             )}

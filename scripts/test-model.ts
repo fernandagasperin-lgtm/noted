@@ -55,7 +55,14 @@ import {
   expandRange,
   parseRef,
 } from '../lib/formula';
-import { borderPoint, boundsOf, connectorPoints, miniSize } from '../lib/geometry';
+import {
+  borderPoint,
+  boundsOf,
+  connectorPoints,
+  curveThrough,
+  groupOf,
+  miniSize,
+} from '../lib/geometry';
 import type { BoardElement } from '../lib/types';
 import type { DbColumn, DbRow } from '../lib/types';
 
@@ -555,6 +562,34 @@ async function main() {
     'ponta orfa nao derruba o desenho',
     connectorPoints(caixa({ type: 'arrow', fromId: 'a', toId: 'sumiu' }), [caixaA]) !== null,
   );
+
+  section('curva e grupo');
+  const curva = curveThrough([0, 0, 200, 0]);
+  check('a curva tem quatro pontos', curva.length === 8);
+  check('e comeca e termina onde a reta', curva[0] === 0 && curva[6] === 200);
+  check(
+    'deitada, os apoios saem na horizontal',
+    curva[1] === 0 && curva[3] === 0 && curva[5] === 0,
+  );
+  const emPe = curveThrough([0, 0, 0, 200]);
+  check(
+    'em pe, os apoios saem na vertical',
+    emPe[2] === 0 && emPe[4] === 0 && emPe[3] > 0 && emPe[5] < 200,
+  );
+  const coladas = curveThrough([0, 0, 4, 0]);
+  check('pontas coladas ainda geram curva', coladas.length === 8 && coladas[2] > 0);
+
+  const g1 = caixa({ id: 'g1', groupId: 'time' });
+  const g2 = caixa({ id: 'g2', groupId: 'time' });
+  const solto = caixa({ id: 'so' });
+  const todos = [g1, g2, solto];
+  check('o grupo traz os companheiros', groupOf(g1, todos).length === 2);
+  check('quem nao tem grupo vem sozinho', groupOf(solto, todos).length === 1);
+  check(
+    'e o proprio elemento esta sempre dentro',
+    groupOf(g2, todos).some((e) => e.id === 'g2'),
+  );
+
 
   section('coluna Nome opcional');
   const semNome = (await createPage(alice.id, projA.id, 'Sem nome', 'database'))!;

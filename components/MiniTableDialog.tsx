@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import { colName, displayValue, evaluateGrid, refOf } from '@/lib/formula';
 import type { MiniTable, Page } from '@/lib/types';
@@ -26,6 +26,37 @@ export default function MiniTableDialog({
   onClose,
 }: Props) {
   const [foco, setFoco] = useState<string | null>(null);
+
+  /**
+   * Preencher uma tabela e teclar, nao clicar: Enter desce, Tab anda para o
+   * lado (a ordem do DOM ja faz isso) e Enter na ultima linha cria a proxima.
+   */
+  const campos = useRef<Record<string, HTMLInputElement | null>>({});
+  const focarDepois = useRef<string | null>(null);
+
+  useEffect(() => {
+    const alvo = focarDepois.current;
+    if (!alvo) return;
+    const campo = campos.current[alvo];
+    if (!campo) return;
+    focarDepois.current = null;
+    campo.focus();
+    campo.select();
+  });
+
+  const andar = (c: number, r: number, passo: number) => {
+    const destino = r + passo;
+    if (destino < 0) return;
+    if (destino >= t.rows) {
+      if (passo < 0) return;
+      focarDepois.current = refOf(c, destino);
+      mudar({ rows: t.rows + 1 });
+      return;
+    }
+    const campo = campos.current[refOf(c, destino)];
+    campo?.focus();
+    campo?.select();
+  };
 
   const resultados = useMemo(
     () =>
@@ -142,14 +173,28 @@ export default function MiniTableDialog({
                     return (
                       <td key={ref} className="p-0">
                         <input
+                          ref={(no) => {
+                            campos.current[ref] = no;
+                          }}
+                          autoFocus={canEdit && c === 0 && r === (t.header ? 1 : 0)}
                           value={editando ? bruto : displayValue(res)}
                           readOnly={!canEdit}
                           onFocus={() => setFoco(ref)}
                           onBlur={() => setFoco(null)}
                           onChange={(e) => setCelula(ref, e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === 'Escape') {
+                            if (e.key === 'Escape') {
                               (e.target as HTMLInputElement).blur();
+                              return;
+                            }
+                            if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              andar(c, r, e.key === 'Enter' && e.shiftKey ? -1 : 1);
+                              return;
+                            }
+                            if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              andar(c, r, -1);
                             }
                           }}
                           style={{ width: t.widths[c] ?? LARGURA_PADRAO }}

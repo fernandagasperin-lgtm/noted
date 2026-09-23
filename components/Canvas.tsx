@@ -5,7 +5,7 @@ import { Stage, Layer, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import Shape from './Shape';
 import type { Assistant, BoardElement, Page, Project } from '@/lib/types';
-import { CONNECTABLE } from '@/lib/geometry';
+import { CONNECTABLE, groupOf } from '@/lib/geometry';
 import type { Tool } from './Toolbar';
 
 export type Lado = 'cima' | 'baixo' | 'esquerda' | 'direita';
@@ -29,6 +29,10 @@ interface Props {
   onOpenCard: (el: BoardElement) => void;
   /** cria um balao ligado a este, do lado escolhido */
   onCreateLinked: (sourceId: string, lado: Lado) => void;
+  /** liga dois elementos que ja existem */
+  onConnect: (fromId: string, toId: string) => void;
+  /** move varios de uma vez, quando estao agrupados */
+  onMoveMany: (movimentos: { id: string; x: number; y: number }[]) => void;
   linked: Record<string, Record<string, number[]>>;
   onUndo: () => void;
   onRedo: () => void;
@@ -57,6 +61,8 @@ export default function Canvas({
   onOpenRef,
   onOpenCard,
   onCreateLinked,
+  onConnect,
+  onMoveMany,
   linked,
   onUndo,
   onRedo,
@@ -72,6 +78,14 @@ export default function Canvas({
   const [alcas, setAlcas] = useState<
     { x: number; y: number; width: number; height: number } | null
   >(null);
+  /** traco de previa enquanto se arrasta um '+' ate outro elemento */
+  const [ligando, setLigando] = useState<{
+    sourceId: string;
+    lado: Lado;
+    de: { x: number; y: number };
+    para: { x: number; y: number };
+    alvo: string | null;
+  } | null>(null);
 
   // Tabelinha tem tamanho proprio e seta presa segue os baloes: esticar as
   // duas so criaria um estado que o proximo render desfaz.
@@ -265,17 +279,128 @@ export default function Canvas({
     // outro: deixar o clique subir ate o stage e o que permite isso.
     if (tool !== 'select') return;
     e.cancelBubble = true;
+    // Quem esta agrupado e escolhido junto: clicar num e clicar em todos.
+    const doGrupo = groupOf(el, page.elements).map((g) => g.id);
     const additive = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
     if (additive) {
       setSelectedIds(
         selectedIds.includes(el.id)
-          ? selectedIds.filter((i) => i !== el.id)
-          : [...selectedIds, el.id],
+          ? selectedIds.filter((i) => !doGrupo.includes(i))
+          : [...selectedIds, ...doGrupo.filter((i) => !selectedIds.includes(i))],
       );
     } else if (!selectedIds.includes(el.id)) {
-      setSelectedIds([el.id]);
+      setSelectedIds(doGrupo);
     }
   };
+
+  /**
+   * Arrastar um elemento agrupado arrasta os companheiros. Enquanto o dedo
+   * esta na tela mexemos os nos do Konva direto; so no fim o estado e gravado,
+   * senao o React redesenharia por cima do arrasto em curso.
+   */
+  const arrasto = useRef<{
+    id: string;
+    base: { x: number; y: number };
+    outros: { id: string; x: number; y: number }[];
+  } | null>(null);
+
+  const iniciarArrastoGrupo = (el: BoardElement) => () => {
+    // Zerar antes evita herdar um arrasto anterior que nao chegou ao fim.
+    arrasto.current = null;
+    const companheiros = groupOf(el, page.elements).filter((g) => g.id !== el.id);
+    if (companheiros.length === 0) return;
+    arrasto.current = {
+      id: el.id,
+      base: { x: el.x, y: el.y },
+      outros: companheiros.map((g) => ({ id: g.id, x: g.x, y: g.y })),
+    };
+  };
+
+  const moverGrupo = () => {
+    const a = arrasto.current;
+    const stage = stageRef.current;
+    if (!a || !stage) return;
+    const no = stage.findOne<Konva.Node>('#' + a.id);
+    if (!no) return;
+    const dx = no.x() - a.base.x;
+    const dy = no.y() - a.base.y;
+    for (const o of a.outros) {
+      stage.findOne<Konva.Node>('#' + o.id)?.position({ x: o.x + dx, y: o.y + dy });
+    }
+    stage.batchDraw();
+  };
+
+  const soltarGrupo = (el: BoardElement) => (patch: Partial<BoardElement>) => {
+    const a = arrasto.current;
+    if (!a || a.id !== el.id) {
+      onChange(el.id, patch);
+      return;
+    }
+    const dx = (patch.x ?? el.x) - a.base.x;
+    const dy = (patch.y ?? el.y) - a.base.y;
+    onMoveMany([
+      { id: el.id, x: patch.x ?? el.x, y: patch.y ?? el.y },
+      ...a.outros.map((o) => ({ id: o.id, x: o.x + dx, y: o.y + dy })),
+    ]);
+    arrasto.current = null;
+  };
+
+
+  /** Qual elemento esta debaixo do ponteiro, se houver. */
+  const elementoEm = (x: number, y: number): string | null => {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    const achado = stage.getIntersection({ x, y });
+    const grupo = achado?.findAncestor('.element', true) as Konva.Node | undefined;
+    const id = grupo?.id();
+    return id && page.elements.some((el) => el.id === id) ? id : null;
+  };
+
+  /**
+   * Um '+' serve para duas coisas: clicado, cria o proximo balao; arrastado
+   * ate outro elemento, liga os dois que ja existem.
+   */
+  const comecarLigacao =
+    (sourceId: string, lado: Lado, origem: { x: number; y: number }) =>
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      const caixa = containerRef.current?.getBoundingClientRect();
+      if (!caixa) return;
+      // Sem preventDefault o navegador ainda manda os eventos de mouse
+      // equivalentes, e o stage comeca a arrastar o quadro junto.
+      e.preventDefault();
+      e.stopPropagation();
+
+      const noQuadro = (ev: PointerEvent) => ({
+        x: ev.clientX - caixa.left,
+        y: ev.clientY - caixa.top,
+      });
+
+      setLigando({ sourceId, lado, de: origem, para: origem, alvo: null });
+
+      // Escutar na janela em vez de capturar o ponteiro: a captura pode ser
+      // recusada, e ai o gesto inteiro morria sem aviso.
+      const mover = (ev: PointerEvent) => {
+        const p = noQuadro(ev);
+        setLigando({ sourceId, lado, de: origem, para: p, alvo: elementoEm(p.x, p.y) });
+      };
+
+      const soltar = (ev: PointerEvent) => {
+        window.removeEventListener('pointermove', mover);
+        window.removeEventListener('pointerup', soltar);
+        window.removeEventListener('pointercancel', soltar);
+        setLigando(null);
+
+        const p = noQuadro(ev);
+        const andou = Math.hypot(p.x - origem.x, p.y - origem.y) > 8;
+        const alvo = elementoEm(p.x, p.y);
+        if (andou && alvo && alvo !== sourceId) onConnect(sourceId, alvo);
+        else if (!andou) onCreateLinked(sourceId, lado);
+      };
+
+      window.addEventListener('pointermove', mover);
+      window.addEventListener('pointerup', soltar);
+      window.addEventListener('pointercancel', soltar);
+    };
 
   const applyZoom = (next: number) => {
     const stage = stageRef.current;
@@ -343,7 +468,9 @@ export default function Canvas({
               isSelected={selectedIds.includes(el.id)}
               draggable={tool === 'select'}
               onSelect={selectElement(el)}
-              onChange={(patch) => onChange(el.id, patch)}
+              onDragStart={iniciarArrastoGrupo(el)}
+              onDragMove={moverGrupo}
+              onChange={soltarGrupo(el)}
               onEditText={() => beginEdit(el)}
               onOpenRef={onOpenRef}
             />
@@ -391,6 +518,23 @@ export default function Canvas({
         />
       )}
 
+      {ligando && (
+        <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full">
+          <line
+            x1={ligando.de.x}
+            y1={ligando.de.y}
+            x2={ligando.para.x}
+            y2={ligando.para.y}
+            stroke={ligando.alvo ? '#2383E2' : '#C3CBD8'}
+            strokeWidth={ligando.alvo ? 2 : 1.5}
+            strokeDasharray="5 4"
+          />
+          {ligando.alvo && (
+            <circle cx={ligando.para.x} cy={ligando.para.y} r={5} fill="#2383E2" />
+          )}
+        </svg>
+      )}
+
       {alcas && alvoAlcas && (
         <>
           {(
@@ -403,9 +547,9 @@ export default function Canvas({
           ).map(([lado, cx, cy]) => (
             <button
               key={lado}
-              onClick={() => onCreateLinked(alvoAlcas.id, lado)}
-              title="Ligar um balao deste lado"
-              style={{ left: cx - 11, top: cy - 11 }}
+              onPointerDown={comecarLigacao(alvoAlcas.id, lado, { x: cx, y: cy })}
+              title="Clique para criar um balao ligado, ou arraste ate outro para ligar os dois"
+              style={{ left: cx - 11, top: cy - 11, touchAction: 'none' }}
               className="absolute z-10 flex h-[22px] w-[22px] items-center justify-center rounded-full border border-blue-200 bg-white text-blue-500 shadow-md shadow-slate-900/10 transition hover:bg-blue-500 hover:text-white"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

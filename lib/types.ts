@@ -53,6 +53,12 @@ export interface BoardElement {
   fromId?: string;
   toId?: string;
 
+  /**
+   * Elementos com o mesmo grupo andam juntos e sao selecionados juntos, ate
+   * alguem desagrupar. Nao ha pai nem filho: mover qualquer um move todos.
+   */
+  groupId?: string;
+
   /** minitable only */
   table?: MiniTable;
 

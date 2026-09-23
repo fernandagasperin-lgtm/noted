@@ -86,6 +86,31 @@ export function connectorPoints(
   return [a.x, a.y, b.x, b.y];
 }
 
+/**
+ * Os pontos de uma curva de Bezier entre as duas pontas. A curva sai reta do
+ * balao e so depois vira, que e o que faz o traco parecer desenhado a mao em
+ * vez de um risco de regua.
+ */
+export function curveThrough(pts: number[]): number[] {
+  const [ax, ay, bx, by] = pts;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const deitada = Math.abs(dx) > Math.abs(dy);
+  const folga = Math.min(140, Math.max(36, (deitada ? Math.abs(dx) : Math.abs(dy)) * 0.5));
+  const sx = Math.sign(dx) || 1;
+  const sy = Math.sign(dy) || 1;
+
+  const c1 = deitada ? [ax + folga * sx, ay] : [ax, ay + folga * sy];
+  const c2 = deitada ? [bx - folga * sx, by] : [bx, by - folga * sy];
+  return [ax, ay, c1[0], c1[1], c2[0], c2[1], bx, by];
+}
+
+/** Todos os elementos que andam junto com este, ele incluido. */
+export function groupOf(el: BoardElement, elements: BoardElement[]): BoardElement[] {
+  if (!el.groupId) return [el];
+  return elements.filter((e) => e.groupId === el.groupId);
+}
+
 export const CONNECTABLE = new Set([
   'rectangle',
   'ellipse',

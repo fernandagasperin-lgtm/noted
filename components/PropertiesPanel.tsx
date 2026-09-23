@@ -34,6 +34,8 @@ interface Props {
   onDuplicate: () => void;
   onBringToFront: () => void;
   onSendToBack: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
   onDeselect: () => void;
 }
 
@@ -48,6 +50,8 @@ export default function PropertiesPanel({
   onDuplicate,
   onBringToFront,
   onSendToBack,
+  onGroup,
+  onUngroup,
   onDeselect,
 }: Props) {
   if (elements.length === 0) {
@@ -77,6 +81,13 @@ export default function PropertiesPanel({
   );
   const isReference = first.type === 'reference';
   const isCard = first.type === 'assistant' || first.type === 'derivation';
+
+  // As setas ja seguem as pontas; agrupa-las nao teria efeito nenhum.
+  const agrupaveis = elements.filter((el) => el.type !== 'arrow');
+  const estaAgrupado = agrupaveis.some((el) => el.groupId);
+  const podeAgrupar =
+    agrupaveis.length > 1 &&
+    !(estaAgrupado && agrupaveis.every((el) => el.groupId === agrupaveis[0].groupId));
 
   const label = (text: string) => (
     <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
@@ -258,6 +269,17 @@ export default function PropertiesPanel({
       )}
 
       <div className="space-y-0.5 border-t border-slate-100 pt-4">
+        {podeAgrupar && (
+          <button onClick={onGroup} className={rowButton}>
+            Agrupar
+            <span className="float-right text-slate-300">andam juntos</span>
+          </button>
+        )}
+        {estaAgrupado && (
+          <button onClick={onUngroup} className={rowButton}>
+            Desagrupar
+          </button>
+        )}
         <button onClick={onBringToFront} className={rowButton}>
           Trazer para frente
         </button>
