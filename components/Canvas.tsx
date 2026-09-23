@@ -112,7 +112,7 @@ export default function Canvas({
 
   /** Um so elemento selecionado ganha os '+' que puxam o proximo balao. */
   const alvoAlcas =
-    selectedIds.length === 1
+    selectedIds.length >= 1
       ? (page.elements.find((el) => el.id === selectedIds[0]) ?? null)
       : null;
   const podeLigar = Boolean(alvoAlcas && CONNECTABLE.has(alvoAlcas.type) && !editing);
