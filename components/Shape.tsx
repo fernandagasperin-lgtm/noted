@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { Rect, Ellipse, Text, Group, Arrow, Line, Image as KonvaImage } from 'react-konva';
+import { Rect, Ellipse, Text, Group, Arrow, Line, Image as KonvaImage, Circle } from 'react-konva';
 import type Konva from 'konva';
 import type { Assistant, BoardElement, Page, Project } from '@/lib/types';
 import { MINI_ROW_H, connectorPoints, curveThrough } from '@/lib/geometry';
@@ -92,6 +92,36 @@ export default function Shape({
 }: Props) {
   const img = useImage(el.type === 'image' ? el.src : undefined);
 
+  /**
+   * Para setas soltas (sem fromId/toId), detecta quando chega perto de um
+   * elemento e "magnetar" nele, pronto para ligar.
+   */
+  const [imaDe, setImaDe] = useState<string | null>(null);
+  const [imaPara, setImaPara] = useState<string | null>(null);
+
+  const detectarMagnetoDaSeta = () => {
+    if (el.type !== 'arrow' || el.fromId || el.toId) {
+      setImaDe(null);
+      setImaPara(null);
+      return;
+    }
+    const pts = el.points ?? [0, 0, el.width, el.height];
+    const de = { x: el.x + pts[0], y: el.y + pts[1] };
+    const para = { x: el.x + pts[2], y: el.y + pts[3] };
+    const RAIO = 80; // distancia de magnetar
+
+    const perto = (pt: { x: number; y: number }) =>
+      elements.find((e) => {
+        if (e.type === 'arrow' || e.id === el.id) return false;
+        const dx = e.x + e.width / 2 - pt.x;
+        const dy = e.y + e.height / 2 - pt.y;
+        return Math.hypot(dx, dy) < RAIO;
+      })?.id ?? null;
+
+    setImaDe(perto(de));
+    setImaPara(perto(para));
+  };
+
   const common = {
     id: el.id,
     name: 'element',
@@ -174,18 +204,45 @@ export default function Shape({
           />
         );
       }
+      const pts = el.points ?? [0, 0, el.width, el.height];
       return (
-        <Arrow
-          {...common}
-          points={el.points ?? [0, 0, el.width, el.height]}
-          stroke={el.style.stroke}
-          strokeWidth={el.style.strokeWidth}
-          fill={el.style.stroke}
-          pointerLength={11}
-          pointerWidth={11}
-          lineCap="round"
-          hitStrokeWidth={20}
-        />
+        <Group {...common} draggable={draggable} onDragMove={() => {
+          onDragMove?.();
+          detectarMagnetoDaSeta();
+        }} onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
+          setImaDe(null);
+          setImaPara(null);
+          onChange({ x: e.target.x(), y: e.target.y() });
+        }}>
+          <Arrow
+            points={pts}
+            stroke={imaDe || imaPara ? '#2383E2' : el.style.stroke}
+            strokeWidth={(imaDe || imaPara ? 2.5 : el.style.strokeWidth)}
+            fill={imaDe || imaPara ? '#2383E2' : el.style.stroke}
+            pointerLength={11}
+            pointerWidth={11}
+            lineCap="round"
+            hitStrokeWidth={20}
+          />
+          {imaDe && (
+            <Circle
+              x={pts[0]}
+              y={pts[1]}
+              radius={6}
+              fill="#2383E2"
+              opacity={0.8}
+            />
+          )}
+          {imaPara && (
+            <Circle
+              x={pts[2]}
+              y={pts[3]}
+              radius={6}
+              fill="#2383E2"
+              opacity={0.8}
+            />
+          )}
+        </Group>
       );
     }
 
