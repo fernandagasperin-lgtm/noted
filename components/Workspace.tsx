@@ -529,6 +529,77 @@ export default function Workspace() {
     [selectedIds, setElements],
   );
 
+  const align = useCallback(
+    (tipo: 'left' | 'center' | 'right') => {
+      const atual = pagesRef.current.find((p) => p.id === activeId);
+      if (!atual || selectedIds.length < 2) return;
+      const alvos = atual.elements.filter((el) => selectedIds.includes(el.id));
+      if (tipo === 'left') {
+        const minX = Math.min(...alvos.map((el) => el.x));
+        setElements((prev) =>
+          prev.map((el) => (alvos.some((a) => a.id === el.id) ? { ...el, x: minX } : el)),
+        );
+      } else if (tipo === 'right') {
+        const maxX = Math.max(...alvos.map((el) => el.x + el.width));
+        setElements((prev) =>
+          prev.map((el) =>
+            alvos.some((a) => a.id === el.id)
+              ? { ...el, x: maxX - el.width }
+              : el,
+          ),
+        );
+      } else if (tipo === 'center') {
+        const avgX =
+          alvos.reduce((sum, el) => sum + el.x + el.width / 2, 0) / alvos.length;
+        setElements((prev) =>
+          prev.map((el) =>
+            alvos.some((a) => a.id === el.id)
+              ? { ...el, x: Math.round(avgX - el.width / 2) }
+              : el,
+          ),
+        );
+      }
+    },
+    [activeId, selectedIds, setElements],
+  );
+
+  const distribute = useCallback(
+    (eixo: 'h' | 'v') => {
+      const atual = pagesRef.current.find((p) => p.id === activeId);
+      if (!atual || selectedIds.length < 3) return;
+      const alvos = atual.elements
+        .filter((el) => selectedIds.includes(el.id))
+        .sort((a, b) => (eixo === 'h' ? a.x - b.x : a.y - b.y));
+
+      if (eixo === 'h') {
+        const minX = Math.min(...alvos.map((el) => el.x));
+        const maxX = Math.max(...alvos.map((el) => el.x + el.width));
+        const gap = (maxX - minX - alvos.reduce((sum, el) => sum + el.width, 0)) / (alvos.length - 1);
+        setElements((prev) =>
+          prev.map((el) => {
+            const idx = alvos.findIndex((a) => a.id === el.id);
+            if (idx < 0) return el;
+            const newX = minX + alvos.slice(0, idx).reduce((sum, a) => sum + a.width + gap, 0);
+            return { ...el, x: Math.round(newX) };
+          }),
+        );
+      } else {
+        const minY = Math.min(...alvos.map((el) => el.y));
+        const maxY = Math.max(...alvos.map((el) => el.y + el.height));
+        const gap = (maxY - minY - alvos.reduce((sum, el) => sum + el.height, 0)) / (alvos.length - 1);
+        setElements((prev) =>
+          prev.map((el) => {
+            const idx = alvos.findIndex((a) => a.id === el.id);
+            if (idx < 0) return el;
+            const newY = minY + alvos.slice(0, idx).reduce((sum, a) => sum + a.height + gap, 0);
+            return { ...el, y: Math.round(newY) };
+          }),
+        );
+      }
+    },
+    [activeId, selectedIds, setElements],
+  );
+
   const restoreSnapshot = useCallback(
     (snapshot: BoardElement[]) => {
       pagesRef.current = pagesRef.current.map((p) =>
@@ -1012,6 +1083,11 @@ export default function Workspace() {
               onSendToBack={() => reorder(false)}
               onGroup={agrupar}
               onUngroup={desagrupar}
+              onAlignLeft={() => align('left')}
+              onAlignCenter={() => align('center')}
+              onAlignRight={() => align('right')}
+              onDistributeH={() => distribute('h')}
+              onDistributeV={() => distribute('v')}
               onDeselect={() => setSelectedIds([])}
             />
             )}

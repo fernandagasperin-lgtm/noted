@@ -36,6 +36,11 @@ interface Props {
   onSendToBack: () => void;
   onGroup: () => void;
   onUngroup: () => void;
+  onAlignLeft: () => void;
+  onAlignCenter: () => void;
+  onAlignRight: () => void;
+  onDistributeH: () => void;
+  onDistributeV: () => void;
   onDeselect: () => void;
 }
 
@@ -52,6 +57,11 @@ export default function PropertiesPanel({
   onSendToBack,
   onGroup,
   onUngroup,
+  onAlignLeft,
+  onAlignCenter,
+  onAlignRight,
+  onDistributeH,
+  onDistributeV,
   onDeselect,
 }: Props) {
   if (elements.length === 0) {
@@ -279,6 +289,22 @@ export default function PropertiesPanel({
           <button onClick={onUngroup} className={rowButton}>
             Desagrupar
           </button>
+        )}
+        {elements.length > 1 && (
+          <>
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <div className="text-[11px] font-medium text-slate-500 mb-1.5">Alinhar</div>
+              <div className="grid grid-cols-3 gap-1">
+                <button onClick={onAlignLeft} className="rounded px-1.5 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600" title="Esquerda">←</button>
+                <button onClick={onAlignCenter} className="rounded px-1.5 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600" title="Centro">↔</button>
+                <button onClick={onAlignRight} className="rounded px-1.5 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600" title="Direita">→</button>
+              </div>
+              <div className="grid grid-cols-2 gap-1 mt-1.5">
+                <button onClick={onDistributeH} className="rounded px-1.5 py-1 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600" title="Espaçar horizontalmente">Esp. H</button>
+                <button onClick={onDistributeV} className="rounded px-1.5 py-1 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600" title="Espaçar verticalmente">Esp. V</button>
+              </div>
+            </div>
+          </>
         )}
         <button onClick={onBringToFront} className={rowButton}>
           Trazer para frente
