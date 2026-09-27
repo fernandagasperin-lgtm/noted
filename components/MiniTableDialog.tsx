@@ -3,7 +3,35 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import { displayValue, evaluateGrid, refOf } from '@/lib/formula';
-import type { MiniTable, Page } from '@/lib/types';
+import type { MiniColType, MiniTable, Page } from '@/lib/types';
+import { MINI_COL_LABELS } from '@/lib/types';
+
+/** Simbolo compacto de cada tipo — vira o "chip" no header da coluna. */
+const TIPO_SIMBOLO: Record<MiniColType, string> = {
+  auto: 'T',
+  number: '123',
+  brl: 'R$',
+  usd: 'US$',
+  percent: '%',
+  date: '📅',
+};
+
+/** Devolve uma versao formatada do valor conforme o tipo escolhido para a coluna. */
+function formatarPorTipo(valor: string | number, tipo: MiniColType): string {
+  if (tipo === 'auto' || valor === '' || valor == null) return String(valor);
+  const n = Number(String(valor).replace(',', '.'));
+  if (Number.isNaN(n)) return String(valor);
+  if (tipo === 'number') return n.toLocaleString('pt-BR');
+  if (tipo === 'brl') return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  if (tipo === 'usd') return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  if (tipo === 'percent') return n.toLocaleString('pt-BR') + '%';
+  return String(valor);
+}
+
+/** Coluna e "numerica" quando permite soma automatica na linha de Total. */
+function ehNumerica(tipo: MiniColType | undefined): boolean {
+  return tipo === 'number' || tipo === 'brl' || tipo === 'usd' || tipo === 'percent';
+}
 
 interface Props {
   table: MiniTable;
@@ -27,6 +55,17 @@ export default function MiniTableDialog({
 }: Props) {
   const [foco, setFoco] = useState<string | null>(null);
   const [mostrarAvancado, setMostrarAvancado] = useState(false);
+  const [menuTipoCol, setMenuTipoCol] = useState<number | null>(null);
+
+  /** Tipo por coluna, sempre com o tamanho certo mesmo em tabelas antigas. */
+  const tipoDaCol = (c: number): MiniColType => t.colTypes?.[c] ?? 'auto';
+
+  const setTipoDaCol = (c: number, tipo: MiniColType) => {
+    const novos = Array.from({ length: t.cols }, (_, i) => t.colTypes?.[i] ?? 'auto');
+    novos[c] = tipo;
+    mudar({ colTypes: novos });
+    setMenuTipoCol(null);
+  };
 
   /**
    * Preencher uma tabela e teclar, nao clicar: Enter desce, Tab anda para o
@@ -156,23 +195,63 @@ export default function MiniTableDialog({
             <thead>
               <tr>
                 <th className="w-6" />
-                {Array.from({ length: t.cols }, (_, c) => (
-                  <th
-                    key={c}
-                    style={{ minWidth: t.widths[c] ?? LARGURA_PADRAO }}
-                    className="pb-0.5 text-center opacity-0 group-hover/tabela:opacity-100 transition-opacity"
-                  >
-                    {canEdit && t.cols > 1 && (
-                      <button
-                        onClick={() => tirarColuna(c)}
-                        title="Apagar coluna"
-                        className="rounded px-1 py-0.5 text-[13px] leading-none text-slate-300 transition hover:bg-red-50 hover:text-red-500"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </th>
-                ))}
+                {Array.from({ length: t.cols }, (_, c) => {
+                  const tipo = tipoDaCol(c);
+                  const custom = tipo !== 'auto';
+                  return (
+                    <th
+                      key={c}
+                      style={{ minWidth: t.widths[c] ?? LARGURA_PADRAO }}
+                      className={
+                        'pb-0.5 text-center transition-opacity ' +
+                        (custom || menuTipoCol === c ? 'opacity-100' : 'opacity-0 group-hover/tabela:opacity-100')
+                      }
+                    >
+                      {canEdit && (
+                        <div className="relative inline-flex items-center gap-0.5">
+                          <button
+                            onClick={() => setMenuTipoCol(menuTipoCol === c ? null : c)}
+                            title={`Tipo: ${MINI_COL_LABELS[tipo]}`}
+                            className={
+                              'rounded px-1 py-0.5 text-[10.5px] leading-none transition ' +
+                              (custom
+                                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                                : 'text-slate-300 hover:bg-slate-100 hover:text-slate-600')
+                            }
+                          >
+                            {TIPO_SIMBOLO[tipo]}
+                          </button>
+                          {t.cols > 1 && (
+                            <button
+                              onClick={() => tirarColuna(c)}
+                              title="Apagar coluna"
+                              className="rounded px-1 py-0.5 text-[13px] leading-none text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                            >
+                              ×
+                            </button>
+                          )}
+                          {menuTipoCol === c && (
+                            <div className="absolute left-0 top-6 z-20 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg text-left">
+                              {(Object.keys(MINI_COL_LABELS) as MiniColType[]).map((k) => (
+                                <button
+                                  key={k}
+                                  onClick={() => setTipoDaCol(c, k)}
+                                  className={
+                                    'flex w-full items-center gap-2 rounded px-2 py-1 text-[12.5px] hover:bg-slate-50 ' +
+                                    (tipo === k ? 'text-blue-600 font-medium' : 'text-slate-600')
+                                  }
+                                >
+                                  <span className="w-8 text-center text-[10.5px] text-slate-400">{TIPO_SIMBOLO[k]}</span>
+                                  {MINI_COL_LABELS[k]}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -198,6 +277,12 @@ export default function MiniTableDialog({
                     const res = pendente ? { value: '...', error: null } : bruta;
                     const editando = foco === ref;
                     const cabecalho = t.header && r === 0;
+                    const tipoCol = tipoDaCol(c);
+                    const mostrado = editando
+                      ? bruto
+                      : cabecalho || res?.error
+                        ? displayValue(res)
+                        : formatarPorTipo(res?.value ?? '', tipoCol);
                     return (
                       <td key={ref} className="p-0">
                         <input
@@ -205,7 +290,7 @@ export default function MiniTableDialog({
                             campos.current[ref] = no;
                           }}
                           autoFocus={canEdit && c === 0 && r === (t.header ? 1 : 0)}
-                          value={editando ? bruto : displayValue(res)}
+                          value={mostrado}
                           readOnly={!canEdit}
                           onFocus={() => setFoco(ref)}
                           onBlur={() => setFoco(null)}
@@ -242,6 +327,35 @@ export default function MiniTableDialog({
                   })}
                 </tr>
               ))}
+              {t.showTotal && (
+                <tr className="border-t-2 border-slate-200">
+                  <td className="pr-1 text-right text-[10px] uppercase tracking-wider text-slate-400">Σ</td>
+                  {Array.from({ length: t.cols }, (_, c) => {
+                    const tipoCol = tipoDaCol(c);
+                    if (!ehNumerica(tipoCol)) {
+                      return (
+                        <td key={c} className="border border-slate-100 bg-slate-50 px-2 py-1.5" />
+                      );
+                    }
+                    const primeira = t.header ? 1 : 0;
+                    let soma = 0;
+                    for (let r = primeira; r < t.rows; r++) {
+                      const v = resultados[refOf(c, r)]?.value;
+                      const n = typeof v === 'number' ? v : Number(String(v ?? '').replace(',', '.'));
+                      if (!Number.isNaN(n)) soma += n;
+                    }
+                    return (
+                      <td
+                        key={c}
+                        style={{ width: t.widths[c] ?? LARGURA_PADRAO }}
+                        className="border border-slate-200 bg-blue-50/40 px-2 py-1.5 text-right font-semibold text-slate-700"
+                      >
+                        {formatarPorTipo(soma, tipoCol)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              )}
             </tbody>
           </table>
 
@@ -269,6 +383,15 @@ export default function MiniTableDialog({
                   className="accent-blue-500 h-3 w-3"
                 />
                 cabeçalho
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={t.showTotal ?? false}
+                  onChange={(e) => mudar({ showTotal: e.target.checked })}
+                  className="accent-blue-500 h-3 w-3"
+                />
+                total
               </label>
 
               <div className="flex-1" />

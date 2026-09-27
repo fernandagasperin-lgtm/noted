@@ -19,6 +19,18 @@ export interface Style {
   opacity: number;
 }
 
+/** Tipo de valor de uma coluna da mini-tabela — muda formatação e soma. */
+export type MiniColType = 'auto' | 'number' | 'brl' | 'usd' | 'percent' | 'date';
+
+export const MINI_COL_LABELS: Record<MiniColType, string> = {
+  auto: 'Texto',
+  number: 'Número',
+  brl: 'Real (R$)',
+  usd: 'Dólar (US$)',
+  percent: 'Porcentagem (%)',
+  date: 'Data',
+};
+
 /** A tabelinha que vive dentro de um balao do mural. */
 export interface MiniTable {
   cols: number;
@@ -31,6 +43,10 @@ export interface MiniTable {
   cells: Record<string, string>;
   /** quando preenchido, COLUNA("Nome") le dessa tabela grande */
   linkedPageId?: string;
+  /** tipo por coluna; se ausente ou 'auto', se comporta como texto. */
+  colTypes?: MiniColType[];
+  /** quando true, mostra automaticamente uma linha de Total ao final */
+  showTotal?: boolean;
 }
 
 export interface BoardElement {

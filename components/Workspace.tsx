@@ -521,6 +521,31 @@ export default function Workspace() {
     setSelectedIds(copies.map((c) => c.id));
   }, [selectedIds, activeId, setElements]);
 
+  /** Clipboard interno: guarda snapshots das copias entre Ctrl+C e Ctrl+V. */
+  const clipboard = useRef<BoardElement[]>([]);
+
+  const copySelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    const source = pagesRef.current.find((p) => p.id === activeId)?.elements ?? [];
+    clipboard.current = source
+      .filter((el) => selectedIds.includes(el.id))
+      .map((el) => ({ ...el }));
+  }, [selectedIds, activeId]);
+
+  const pasteFromClipboard = useCallback(() => {
+    if (clipboard.current.length === 0) return;
+    const grupoNovo = crypto.randomUUID();
+    const copies = clipboard.current.map((el) => ({
+      ...el,
+      id: crypto.randomUUID(),
+      x: el.x + 24,
+      y: el.y + 24,
+      groupId: el.groupId ? grupoNovo : undefined,
+    }));
+    setElements((prev) => [...prev, ...copies]);
+    setSelectedIds(copies.map((c) => c.id));
+  }, [setElements]);
+
   const reorder = useCallback(
     (toFront: boolean) => {
       setElements((prev) => {
@@ -894,6 +919,16 @@ export default function Workspace() {
         duplicateSelected();
         return;
       }
+      if (mod && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        copySelected();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        pasteFromClipboard();
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelected();
@@ -921,7 +956,7 @@ export default function Workspace() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, duplicateSelected, deleteSelected]);
+  }, [undo, redo, duplicateSelected, deleteSelected, copySelected, pasteFromClipboard]);
 
   if (!loaded || !activePage) {
     return (
