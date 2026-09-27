@@ -361,75 +361,76 @@ export default function MiniTableDialog({
           </table>
 
           {canEdit && (
-            <div className="mt-3 flex items-center gap-3 text-[12px] text-slate-400">
-              <button
-                onClick={addLinha}
-                title="Adicionar linha"
-                className="rounded px-1.5 py-0.5 hover:bg-slate-100 hover:text-slate-700 transition"
-              >
-                + linha
-              </button>
-              <button
-                onClick={addColuna}
-                title="Adicionar coluna"
-                className="rounded px-1.5 py-0.5 hover:bg-slate-100 hover:text-slate-700 transition"
-              >
-                + coluna
-              </button>
-              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-700">
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[12.5px]">
+              <button onClick={addLinha} className={botao}>+ Linha</button>
+              {t.rows > 1 && (
+                <button onClick={() => tirarLinha()} className={botao}>− Linha</button>
+              )}
+              <button onClick={addColuna} className={botao}>+ Coluna</button>
+              {t.cols > 1 && (
+                <button onClick={() => tirarColuna()} className={botao}>− Coluna</button>
+              )}
+              <label className="flex items-center gap-1.5 text-slate-500">
                 <input
                   type="checkbox"
                   checked={t.header}
                   onChange={(e) => mudar({ header: e.target.checked })}
-                  className="accent-blue-500 h-3 w-3"
+                  className="accent-blue-500"
                 />
-                cabeçalho
+                Cabeçalho
               </label>
-              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-700">
+              <label className="flex items-center gap-1.5 text-slate-500">
                 <input
                   type="checkbox"
                   checked={t.showTotal ?? false}
                   onChange={(e) => mudar({ showTotal: e.target.checked })}
-                  className="accent-blue-500 h-3 w-3"
+                  className="accent-blue-500"
                 />
-                total
+                Linha de Total
               </label>
-
-              <div className="flex-1" />
-
-              <button
-                onClick={() => setMostrarAvancado((v) => !v)}
-                className="text-[11px] hover:text-slate-700 transition"
-              >
-                {mostrarAvancado ? 'Menos' : 'Mais'} opções
-              </button>
             </div>
           )}
 
-          {canEdit && mostrarAvancado && (
-            <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+          {canEdit && (
+            <div className="mt-4 rounded-xl bg-slate-50 p-3.5">
+              <label className="block text-[12px] font-medium text-slate-600">
+                Vincular a uma tabela do mural (para somar colunas dela)
+              </label>
               <select
                 value={t.linkedPageId ?? ''}
                 onChange={(e) => mudar({ linkedPageId: e.target.value || undefined })}
-                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12.5px] text-slate-600 outline-none focus:border-blue-400"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-700 outline-none focus:border-blue-400"
               >
-                <option value="">Vincular a uma tabela do mural…</option>
+                <option value="">Nenhuma — esta tabela vive sozinha</option>
                 {tabelasGrandes.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.title}
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] leading-relaxed text-slate-400">
-                Fórmulas: comece com <code className="rounded bg-slate-100 px-1">=</code>. Ex: <code className="rounded bg-slate-100 px-1">=SOMA(A:A)</code>, <code className="rounded bg-slate-100 px-1">=A2*B2</code>
-                {t.linkedPageId && (
-                  <> · <code className="rounded bg-slate-100 px-1">=COLUNA(&quot;Nome&quot;)</code> soma coluna da tabela vinculada.</>
-                )}
-              </p>
+              {t.linkedPageId && (
+                <p className="mt-2 text-[11.5px] leading-relaxed text-slate-500">
+                  Use <code className="rounded bg-white px-1">=COLUNA(&quot;Nome&quot;)</code> para
+                  trazer a soma de uma coluna de números daquela tabela.
+                  {linked && Object.keys(linked).length > 0 && (
+                    <> Disponíveis: <b>{Object.keys(linked).join(', ')}</b>.</>
+                  )}
+                </p>
+              )}
             </div>
           )}
+
+          <p className="mt-4 text-[11.5px] leading-relaxed text-slate-400">
+            Fórmulas: comece com <code className="rounded bg-slate-100 px-1">=</code>. Ex:{' '}
+            <code className="rounded bg-slate-100 px-1">=SOMA(A:A)</code>,{' '}
+            <code className="rounded bg-slate-100 px-1">=A2*B2</code>,{' '}
+            <code className="rounded bg-slate-100 px-1">=COLUNA(&quot;Preco&quot;)</code>
+          </p>
         </div>
       </div>
     </div>
   );
 }
+
+const botao =
+  'rounded-lg border border-slate-200 px-2.5 py-1 text-slate-600 transition hover:bg-slate-50';

@@ -606,33 +606,48 @@ export default function Shape({
       );
     }
 
-    case 'frame':
+    case 'frame': {
+      const titulo = el.content || 'Frame';
+      // Aproxima largura do texto em px para desenhar fundo branco legivel.
+      const larguraTexto = Math.min(titulo.length * 8 + 20, el.width - 16);
       return (
         <Group {...common} onDblClick={onEditText} onDblTap={onEditText}>
           <Rect
             width={el.width}
             height={el.height}
-            fill="transparent"
+            fill="rgba(148, 163, 184, 0.04)"
             stroke="#94A3B8"
             strokeWidth={1.5}
             strokeDasharray={[5, 3]}
             cornerRadius={6}
+            /* So a borda captura clique - assim da pra selecionar elementos DENTRO do frame */
+            fillEnabled={false}
+            hitStrokeWidth={12}
           />
-          {el.content && (
-            <Text
-              x={8}
-              y={-6}
-              text={el.content}
-              fontSize={13}
-              fontFamily="Inter, system-ui, sans-serif"
-              fontStyle="600"
-              fill="#64748B"
-              listening={false}
-              width={el.width - 16}
-            />
-          )}
+          {/* fundo branco atras do titulo para ficar legivel sobre elementos */}
+          <Rect
+            x={6}
+            y={-11}
+            width={larguraTexto}
+            height={20}
+            fill="#FFFFFF"
+            cornerRadius={4}
+            listening={false}
+          />
+          <Text
+            x={12}
+            y={-6}
+            text={titulo}
+            fontSize={13}
+            fontFamily="Inter, system-ui, sans-serif"
+            fontStyle="600"
+            fill="#475569"
+            listening={false}
+            width={larguraTexto - 12}
+          />
         </Group>
       );
+    }
 
     default:
       return null;

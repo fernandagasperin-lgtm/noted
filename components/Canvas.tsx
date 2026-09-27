@@ -24,7 +24,7 @@ interface Props {
   setTool: (t: Tool) => void;
   selectedIds: string[];
   setSelectedIds: (ids: string[]) => void;
-  onCreate: (x: number, y: number) => void;
+  onCreate: (x: number, y: number, size?: { width: number; height: number }) => void;
   onChange: (id: string, patch: Partial<BoardElement>) => void;
   onOpenRef: (pageId: string) => void;
   onOpenCard: (el: BoardElement) => void;
@@ -105,6 +105,15 @@ export default function Canvas({
   const [boxSel, setBoxSel] = useState<{
     x: number;
     y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  /** Retangulo em desenho para frame (mesma estrutura de boxSel). */
+  const [drawFrame, setDrawFrame] = useState<{
+    x: number;
+    y: number;
+    startX: number;
+    startY: number;
     width: number;
     height: number;
   } | null>(null);
@@ -230,6 +239,15 @@ export default function Canvas({
     const stage = stageRef.current;
     if (!stage) return;
 
+    // Frame e' desenhado arrastando um retangulo, nao com tamanho padrao.
+    if (tool === 'frame') {
+      const pos = stage.getRelativePointerPosition();
+      if (pos) {
+        setDrawFrame({ startX: pos.x, startY: pos.y, x: pos.x, y: pos.y, width: 0, height: 0 });
+      }
+      return;
+    }
+
     if (tool !== 'select') {
       const pos = toCanvasCoords(stage);
       if (pos) onCreate(pos.x, pos.y);
@@ -245,11 +263,24 @@ export default function Canvas({
   };
 
   const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!boxSel || tool !== 'select') return;
     const stage = stageRef.current;
     if (!stage) return;
     const pos = stage.getRelativePointerPosition();
     if (!pos) return;
+
+    if (drawFrame && tool === 'frame') {
+      setDrawFrame({
+        startX: drawFrame.startX,
+        startY: drawFrame.startY,
+        x: Math.min(drawFrame.startX, pos.x),
+        y: Math.min(drawFrame.startY, pos.y),
+        width: Math.abs(pos.x - drawFrame.startX),
+        height: Math.abs(pos.y - drawFrame.startY),
+      });
+      return;
+    }
+
+    if (!boxSel || tool !== 'select') return;
     setBoxSel({
       x: Math.min(boxSel.x, pos.x),
       y: Math.min(boxSel.y, pos.y),
@@ -259,6 +290,15 @@ export default function Canvas({
   };
 
   const handleStageMouseUp = () => {
+    if (drawFrame && tool === 'frame') {
+      // Frame minimo para nao criar um sem tamanho por clique acidental.
+      const w = Math.max(drawFrame.width, 120);
+      const h = Math.max(drawFrame.height, 80);
+      onCreate(drawFrame.x + w / 2, drawFrame.y + h / 2, { width: w, height: h });
+      setDrawFrame(null);
+      setTool('select');
+      return;
+    }
     if (!boxSel) return;
     // Quem esta dentro do box selection entra na selecao.
     const dentro = page.elements.filter((el) => {
@@ -361,43 +401,15 @@ export default function Canvas({
     outros: { id: string; x: number; y: number }[];
   } | null>(null);
 
-  /** Retorna elementos que estão dentro de um frame (bounding box). */
-  const elementsInside = (frame: BoardElement): BoardElement[] => {
-    if (frame.type !== 'frame') return [];
-    const frameX = frame.x;
-    const frameY = frame.y;
-    const frameRight = frame.x + frame.width;
-    const frameBottom = frame.y + frame.height;
-
-    return page.elements.filter((el) => {
-      if (el.id === frame.id) return false;
-      // Verificar se el está totalmente dentro do frame (centro + metade das dimensões)
-      const elLeft = el.x - el.width / 2;
-      const elTop = el.y - el.height / 2;
-      const elRight = el.x + el.width / 2;
-      const elBottom = el.y + el.height / 2;
-
-      return elLeft >= frameX && elRight <= frameRight && elTop >= frameY && elBottom <= frameBottom;
-    });
-  };
-
   const iniciarArrastoGrupo = (el: BoardElement) => () => {
     // Zerar antes evita herdar um arrasto anterior que nao chegou ao fim.
     arrasto.current = null;
-
-    // Coletar companheiros de grupo
     const companheiros = groupOf(el, page.elements).filter((g) => g.id !== el.id);
-
-    // Se for frame, adicionar elementos dentro dele
-    const filhos = el.type === 'frame' ? elementsInside(el) : [];
-
-    const todosCompanheiros = [...companheiros, ...filhos];
-    if (todosCompanheiros.length === 0) return;
-
+    if (companheiros.length === 0) return;
     arrasto.current = {
       id: el.id,
       base: { x: el.x, y: el.y },
-      outros: todosCompanheiros.map((g) => ({ id: g.id, x: g.x, y: g.y })),
+      outros: companheiros.map((g) => ({ id: g.id, x: g.x, y: g.y })),
     };
   };
 
@@ -637,6 +649,22 @@ export default function Canvas({
         </svg>
       )}
 
+      {drawFrame && (
+        <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full">
+          <rect
+            x={drawFrame.x * view.zoom + view.x}
+            y={drawFrame.y * view.zoom + view.y}
+            width={drawFrame.width * view.zoom}
+            height={drawFrame.height * view.zoom}
+            fill="rgba(148, 163, 184, 0.05)"
+            stroke="#94A3B8"
+            strokeWidth="1.5"
+            strokeDasharray="5 3"
+            rx="6"
+          />
+        </svg>
+      )}
+
       {alcas && alvoAlcas && (
         <>
           {(
@@ -678,6 +706,10 @@ export default function Canvas({
       <FloatingToolbar
         stage={stageRef.current}
         selected={selectedIds}
+        algumAgrupado={selectedIds.some((id) => {
+          const el = page.elements.find((e) => e.id === id);
+          return Boolean(el?.groupId);
+        })}
         onAgrupar={onGroup ?? (() => {})}
         onDesagrupar={onUngroup ?? (() => {})}
         onAlignLeft={onAlignLeft ?? (() => {})}

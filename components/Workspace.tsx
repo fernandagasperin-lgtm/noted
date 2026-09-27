@@ -225,18 +225,20 @@ export default function Workspace() {
   const createElement = useCallback(
     (type: ElementType, x: number, y: number, extra: Partial<BoardElement> = {}) => {
       const def = DEFAULTS[type];
+      const w = (extra.width as number | undefined) ?? def.width;
+      const h = (extra.height as number | undefined) ?? def.height;
       // A elipse e desenhada a partir do centro; as demais, do canto.
       const canto = type === 'ellipse' ? { x, y } : {
-        x: x - def.width / 2,
-        y: y - def.height / 2,
+        x: x - w / 2,
+        y: y - h / 2,
       };
       const el: BoardElement = {
         id: crypto.randomUUID(),
         type,
         x: canto.x,
         y: canto.y,
-        width: def.width,
-        height: def.height,
+        width: w,
+        height: h,
         rotation: 0,
         content: def.content,
         style: {
@@ -261,7 +263,7 @@ export default function Workspace() {
   );
 
   const handleCanvasCreate = useCallback(
-    (x: number, y: number) => {
+    (x: number, y: number, size?: { width: number; height: number }) => {
       if (tool === 'select') return;
       if (tool === 'reference') {
         const target = pages.find((p) => p.id !== activeId);
@@ -282,7 +284,7 @@ export default function Workspace() {
         createElement('assistant', x, y, { assistantId: projectAssistants[0].id });
         return;
       }
-      createElement(tool as ElementType, x, y);
+      createElement(tool as ElementType, x, y, size ? { width: size.width, height: size.height } : {});
     },
     [tool, pages, activeId, createElement, projectAssistants],
   );
