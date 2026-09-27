@@ -320,7 +320,7 @@ export default function Sidebar({
                       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13.5px] hover:bg-[#F1F1EF]"
                       style={{ color: INK }}
                     >
-                      <Icon name={project.isPrivate ? 'lock' : 'lockOpen'} size={15} color={MUTED} />
+                      <Icon name={project.isPrivate ? 'eye' : 'share'} size={15} color={MUTED} />
                       {project.isPrivate ? 'Tornar publico' : 'Tornar privado'}
                     </button>
                     <button

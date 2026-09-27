@@ -76,6 +76,13 @@ export default function Canvas({
   onRedo,
   canUndo,
   canRedo,
+  onGroup,
+  onUngroup,
+  onAlignLeft,
+  onAlignCenter,
+  onAlignRight,
+  onBringToFront,
+  onSendToBack,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);

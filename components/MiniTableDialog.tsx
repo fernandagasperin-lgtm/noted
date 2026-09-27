@@ -17,8 +17,9 @@ const TIPO_SIMBOLO: Record<MiniColType, string> = {
 };
 
 /** Devolve uma versao formatada do valor conforme o tipo escolhido para a coluna. */
-function formatarPorTipo(valor: string | number, tipo: MiniColType): string {
-  if (tipo === 'auto' || valor === '' || valor == null) return String(valor);
+function formatarPorTipo(valor: unknown, tipo: MiniColType): string {
+  if (tipo === 'auto' || valor === '' || valor == null) return String(valor ?? '');
+  if (typeof valor === 'boolean') return String(valor);
   const n = Number(String(valor).replace(',', '.'));
   if (Number.isNaN(n)) return String(valor);
   if (tipo === 'number') return n.toLocaleString('pt-BR');

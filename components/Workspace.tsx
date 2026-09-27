@@ -1115,8 +1115,8 @@ export default function Workspace() {
                 onAlignLeft={() => align('left')}
                 onAlignCenter={() => align('center')}
                 onAlignRight={() => align('right')}
-                onBringToFront={bringToFront}
-                onSendToBack={sendToBack}
+                onBringToFront={() => reorder(true)}
+                onSendToBack={() => reorder(false)}
               />
               {canEdit && (
                 <Toolbar
